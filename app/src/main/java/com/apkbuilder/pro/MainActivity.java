@@ -4,6 +4,10 @@ import android.app.ProgressDialog;
 import android.os.Bundle;
 import android.widget.*;
 import androidx.appcompat.app.AppCompatActivity;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.card.MaterialCardView;
+import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.TextInputLayout;
 import okhttp3.*;
 import org.json.JSONObject;
 import java.io.IOException;
@@ -12,10 +16,11 @@ import java.util.regex.Matcher;
 
 public class MainActivity extends AppCompatActivity {
 
-    private EditText repoUrlInput, githubTokenInput, botTokenInput, userIdInput;
-    private Spinner buildTypeSpinner;
-    private Button buildBtn, checkStatusBtn, testConnectionBtn;
+    private TextInputEditText repoUrlInput, githubTokenInput, botTokenInput, userIdInput;
+    private AutoCompleteTextView buildTypeSpinner;
+    private MaterialButton buildBtn, checkStatusBtn, testConnectionBtn;
     private TextView statusText;
+    private ProgressBar progressBar;
     private ProgressDialog progressDialog;
     private OkHttpClient client;
     
@@ -32,27 +37,40 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void initializeViews() {
+        // Initialize TextInputEditText fields
         repoUrlInput = findViewById(R.id.repoUrlInput);
         githubTokenInput = findViewById(R.id.githubTokenInput);
         botTokenInput = findViewById(R.id.botTokenInput);
         userIdInput = findViewById(R.id.userIdInput);
+        
+        // Initialize AutoCompleteTextView for build type
         buildTypeSpinner = findViewById(R.id.buildTypeSpinner);
+        
+        // Initialize MaterialButtons
         buildBtn = findViewById(R.id.buildBtn);
         checkStatusBtn = findViewById(R.id.checkStatusBtn);
         testConnectionBtn = findViewById(R.id.testConnectionBtn);
+        
+        // Initialize TextViews and ProgressBar
         statusText = findViewById(R.id.statusText);
+        progressBar = findViewById(R.id.progressBar);
 
-        // Setup build type spinner
+        // Setup build type spinner with custom adapter
         ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(this,
-                R.array.build_types, android.R.layout.simple_spinner_item);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+                R.array.build_types, R.layout.dropdown_item);
+        adapter.setDropDownViewResource(R.layout.dropdown_item);
         buildTypeSpinner.setAdapter(adapter);
+        
+        // Set default selection
+        buildTypeSpinner.setText("Debug", false);
 
+        // Set click listeners
         buildBtn.setOnClickListener(v -> startBuildProcess());
         checkStatusBtn.setOnClickListener(v -> checkBuildStatus());
         testConnectionBtn.setOnClickListener(v -> testTelegramConnection());
 
-        statusText.setText("🚀 Ready to build Android projects!\n\nEnter your details above");
+        // Set initial status
+        statusText.setText("🚀 Ready to build Android projects!\n\nEnter your details above to start building.");
     }
 
     private void startBuildProcess() {
@@ -60,7 +78,7 @@ public class MainActivity extends AppCompatActivity {
         final String githubToken = githubTokenInput.getText().toString().trim();
         final String botToken = botTokenInput.getText().toString().trim();
         final String userId = userIdInput.getText().toString().trim();
-        final String buildType = buildTypeSpinner.getSelectedItem().toString().toLowerCase();
+        final String buildType = buildTypeSpinner.getText().toString().toLowerCase();
 
         if (repoUrl.isEmpty() || githubToken.isEmpty() || botToken.isEmpty() || userId.isEmpty()) {
             showToast("Please fill all required fields");
@@ -77,19 +95,20 @@ public class MainActivity extends AppCompatActivity {
         currentRepoName = repoInfo[1];
 
         showProgressDialog("Setting up build environment...");
+        showProgressBar(true);
 
         new Thread(() -> {
             try {
                 // Step 1: Verify repository access
                 runOnUiThread(() -> updateStatus("🔍 Checking repository access..."));
                 if (!verifyRepoAccess(githubToken)) {
-                    throw new Exception("Cannot access repository. Check token permissions.");
+                    throw new Exception("Cannot access repository. Check:\n• Repository exists\n• GitHub token has repo permissions\n• Repository is not private (or token has access)");
                 }
 
                 // Step 2: Create or update workflow file
                 runOnUiThread(() -> updateStatus("📝 Configuring workflow..."));
                 if (!setupWorkflow(githubToken, botToken, userId, buildType)) {
-                    throw new Exception("Failed to setup workflow");
+                    throw new Exception("Failed to setup workflow file");
                 }
 
                 // Step 3: Trigger workflow
@@ -100,21 +119,24 @@ public class MainActivity extends AppCompatActivity {
 
                 runOnUiThread(() -> {
                     progressDialog.dismiss();
-                    updateStatus("✅ BUILD STARTED! 🎉\n\n" +
+                    showProgressBar(false);
+                    updateStatus("✅ BUILD STARTED SUCCESSFULLY! 🎉\n\n" +
                             "📦 Repository: " + currentRepoOwner + "/" + currentRepoName + "\n" +
                             "🔨 Build Type: " + buildType + "\n" +
-                            "🏗️ Status: Building on GitHub\n" +
-                            "⏰ ETA: 5-10 minutes\n\n" +
-                            "📱 APK will be sent to your Telegram\n\n" +
-                            "🔍 Monitor: https://github.com/" + currentRepoOwner + "/" + currentRepoName + "/actions");
-                    showToast("Build started successfully!");
+                            "🏗️ Status: Building on GitHub Actions\n" +
+                            "⏰ Estimated Time: 5-10 minutes\n\n" +
+                            "📱 APK will be sent to your Telegram automatically\n\n" +
+                            "🔍 Monitor Progress:\nhttps://github.com/" + currentRepoOwner + "/" + currentRepoName + "/actions\n\n" +
+                            "You can check status anytime using the Status button below.");
+                    showToast("Build started successfully! 🚀");
                 });
 
             } catch (Exception e) {
                 runOnUiThread(() -> {
                     progressDialog.dismiss();
+                    showProgressBar(false);
                     updateStatus("❌ Build Failed\n\nError: " + e.getMessage() + 
-                                "\n\nCheck:\n• GitHub token permissions\n• Repository exists\n• All fields are correct");
+                                "\n\nPlease check:\n• GitHub token permissions (need repo scope)\n• Repository exists and is accessible\n• All fields are filled correctly\n• Internet connection is stable");
                     showToast("Build failed: " + e.getMessage());
                 });
             }
@@ -126,6 +148,7 @@ public class MainActivity extends AppCompatActivity {
         Request request = new Request.Builder()
                 .url(url)
                 .header("Authorization", "token " + token)
+                .header("Accept", "application/vnd.github.v3+json")
                 .build();
 
         try (Response response = client.newCall(request).execute()) {
@@ -139,24 +162,26 @@ public class MainActivity extends AppCompatActivity {
         
         String url = "https://api.github.com/repos/" + currentRepoOwner + "/" + currentRepoName + "/contents/.github/workflows/android-build.yml";
         
-        // First check if file exists
+        // First check if file exists to get SHA for update
         String sha = getFileSha(githubToken, url);
         
         JSONObject requestBody = new JSONObject();
         try {
-            requestBody.put("message", "Configure APK Builder workflow");
+            requestBody.put("message", "Configure Android CI/CD workflow via APK Builder Pro");
             requestBody.put("content", encodedContent);
+            requestBody.put("branch", "main");
             if (sha != null) {
                 requestBody.put("sha", sha); // Required for updating existing file
             }
         } catch (Exception e) {
-            throw new IOException("Error creating request: " + e.getMessage());
+            throw new IOException("Error creating workflow request: " + e.getMessage());
         }
 
         Request request = new Request.Builder()
                 .url(url)
                 .header("Authorization", "token " + githubToken)
                 .header("Accept", "application/vnd.github.v3+json")
+                .header("Content-Type", "application/json")
                 .put(RequestBody.create(requestBody.toString(), MediaType.parse("application/json")))
                 .build();
 
@@ -169,6 +194,7 @@ public class MainActivity extends AppCompatActivity {
         Request request = new Request.Builder()
                 .url(url)
                 .header("Authorization", "token " + token)
+                .header("Accept", "application/vnd.github.v3+json")
                 .build();
 
         try (Response response = client.newCall(request).execute()) {
@@ -178,7 +204,7 @@ public class MainActivity extends AppCompatActivity {
                 return json.getString("sha");
             }
         } catch (Exception e) {
-            // File doesn't exist, that's fine
+            // File doesn't exist, that's fine - we'll create new
         }
         return null;
     }
@@ -197,6 +223,7 @@ public class MainActivity extends AppCompatActivity {
                 .url(url)
                 .header("Authorization", "token " + githubToken)
                 .header("Accept", "application/vnd.github.v3+json")
+                .header("Content-Type", "application/json")
                 .post(RequestBody.create(requestBody.toString(), MediaType.parse("application/json")))
                 .build();
 
@@ -210,7 +237,7 @@ public class MainActivity extends AppCompatActivity {
                              "release".equals(buildType) ? "assembleRelease" : 
                              "assemble";
 
-        return "name: Android CI with APK Builder\n" +
+        return "name: Android CI with APK Builder Pro\n" +
                 "\n" +
                 "on:\n" +
                 "  workflow_dispatch:\n" +
@@ -270,7 +297,7 @@ public class MainActivity extends AppCompatActivity {
                 "          \n" +
                 "          📦 Project: ${{ github.repository }}\n" +
                 "          📱 Build Type: " + buildType + "\n" +
-                "          🔨 Built via APK Builder App\n" +
+                "          🔨 Built via APK Builder Pro App\n" +
                 "          ✅ Ready to install!\n" +
                 "\n" +
                 "    - name: 📊 Build Report\n" +
@@ -300,29 +327,33 @@ public class MainActivity extends AppCompatActivity {
 
     private void checkBuildStatus() {
         if (currentRepoOwner.isEmpty() || currentRepoName.isEmpty()) {
-            showToast("Start a build first");
+            showToast("Please start a build first to set repository");
             return;
         }
 
         String githubToken = githubTokenInput.getText().toString().trim();
         if (githubToken.isEmpty()) {
-            showToast("Enter GitHub token");
+            showToast("Please enter GitHub token");
             return;
         }
 
         showProgressDialog("Checking build status...");
+        showProgressBar(true);
 
         new Thread(() -> {
             try {
                 String status = getWorkflowStatus(githubToken);
                 runOnUiThread(() -> {
                     progressDialog.dismiss();
-                    updateStatus("📊 Build Status:\n\n" + status);
+                    showProgressBar(false);
+                    updateStatus("📊 Latest Build Status:\n\n" + status);
                 });
             } catch (Exception e) {
                 runOnUiThread(() -> {
                     progressDialog.dismiss();
-                    updateStatus("❌ Error: " + e.getMessage());
+                    showProgressBar(false);
+                    updateStatus("❌ Error checking status: " + e.getMessage() + 
+                                "\n\nMake sure:\n• Build was started previously\n• GitHub token is valid\n• Repository exists");
                 });
             }
         }).start();
@@ -334,6 +365,7 @@ public class MainActivity extends AppCompatActivity {
         Request request = new Request.Builder()
                 .url(url)
                 .header("Authorization", "token " + githubToken)
+                .header("Accept", "application/vnd.github.v3+json")
                 .build();
 
         try (Response response = client.newCall(request).execute()) {
@@ -342,16 +374,61 @@ public class MainActivity extends AppCompatActivity {
                 JSONObject json = new JSONObject(body);
                 if (json.getJSONArray("workflow_runs").length() > 0) {
                     JSONObject run = json.getJSONArray("workflow_runs").getJSONObject(0);
-                    return "Status: " + run.getString("status").toUpperCase() + "\n" +
-                           "Conclusion: " + run.optString("conclusion", "PENDING") + "\n" +
-                           "Workflow: " + run.getJSONObject("workflow").getString("name") + "\n" +
-                           "URL: " + run.getString("html_url");
+                    String status = run.getString("status").toUpperCase();
+                    String conclusion = run.optString("conclusion", "PENDING");
+                    String workflowName = run.getJSONObject("workflow").getString("name");
+                    String htmlUrl = run.getString("html_url");
+                    String createdAt = run.getString("created_at");
+                    
+                    StringBuilder statusBuilder = new StringBuilder();
+                    statusBuilder.append("🏷️ Workflow: ").append(workflowName).append("\n");
+                    statusBuilder.append("📈 Status: ").append(status).append("\n");
+                    statusBuilder.append("✅ Conclusion: ").append(conclusion).append("\n");
+                    statusBuilder.append("🕐 Started: ").append(formatDate(createdAt)).append("\n");
+                    statusBuilder.append("🔗 Details: ").append(htmlUrl).append("\n\n");
+                    
+                    // Add helpful message based on status
+                    if ("COMPLETED".equals(status) && "SUCCESS".equals(conclusion)) {
+                        statusBuilder.append("🎉 Build completed successfully!\n");
+                        statusBuilder.append("APK should be in your Telegram messages.");
+                    } else if ("COMPLETED".equals(status) && "FAILURE".equals(conclusion)) {
+                        statusBuilder.append("❌ Build failed.\n");
+                        statusBuilder.append("Check the GitHub link for error details.");
+                    } else if ("IN_PROGRESS".equals(status)) {
+                        statusBuilder.append("🔄 Build is currently running...\n");
+                        statusBuilder.append("This usually takes 5-10 minutes.");
+                    } else if ("QUEUED".equals(status)) {
+                        statusBuilder.append("⏳ Build is queued and will start soon...");
+                    }
+                    
+                    return statusBuilder.toString();
                 }
             }
-            return "No recent builds found";
+            return "No recent workflow runs found.\nStart a new build using the 'Start Build' button.";
         } catch (Exception e) {
-            return "Error: " + e.getMessage();
+            return "Error retrieving status: " + e.getMessage();
         }
+    }
+
+    private String formatDate(String isoDate) {
+        try {
+            if (isoDate != null && isoDate.length() >= 16) {
+                String datePart = isoDate.substring(5, 10); // MM-DD
+                String timePart = isoDate.substring(11, 16); // HH:MM
+                String[] dateParts = datePart.split("-");
+                String month = getMonthName(Integer.parseInt(dateParts[0]));
+                return month + " " + dateParts[1] + ", " + timePart;
+            }
+        } catch (Exception e) {
+            // If formatting fails, return original
+        }
+        return isoDate;
+    }
+
+    private String getMonthName(int month) {
+        String[] months = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+                          "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+        return months[month - 1];
     }
 
     private void testTelegramConnection() {
@@ -359,29 +436,42 @@ public class MainActivity extends AppCompatActivity {
         String userId = userIdInput.getText().toString().trim();
 
         if (botToken.isEmpty() || userId.isEmpty()) {
-            showToast("Enter bot token and user ID");
+            showToast("Please enter bot token and user ID");
             return;
         }
 
-        showProgressDialog("Testing Telegram...");
+        showProgressDialog("Testing Telegram connection...");
+        showProgressBar(true);
 
         new Thread(() -> {
             try {
-                boolean success = sendTelegramMessage(botToken, userId, "🔧 APK Builder Test\n\nYour Telegram is connected! APKs will be sent here. 🚀");
+                boolean success = sendTelegramMessage(botToken, userId, 
+                    "🤖 APK Builder Pro - Connection Test\n\n" +
+                    "✅ Your Telegram is properly configured!\n\n" +
+                    "When your Android build completes on GitHub Actions, the APK file will be sent to this chat automatically. 🚀\n\n" +
+                    "Build details and status updates will also appear here.");
+                
                 runOnUiThread(() -> {
                     progressDialog.dismiss();
+                    showProgressBar(false);
                     if (success) {
-                        updateStatus("✅ Telegram Connected!\n\nTest message sent successfully!");
-                        showToast("Telegram working!");
+                        updateStatus("✅ Telegram Connection Successful!\n\n" +
+                                   "Test message sent successfully!\n\n" +
+                                   "Your bot is configured correctly. APK files will be delivered here when builds complete.");
+                        showToast("Telegram connection working! ✅");
                     } else {
-                        updateStatus("❌ Telegram Failed\n\nCheck bot token and user ID");
-                        showToast("Telegram test failed");
+                        updateStatus("❌ Telegram Connection Failed\n\n" +
+                                   "Could not send test message.\n\n" +
+                                   "Please check:\n• Bot token is correct\n• User ID is correct\n• Bot is started (send /start to your bot)\n• Internet connection is stable");
+                        showToast("Telegram test failed ❌");
                     }
                 });
             } catch (Exception e) {
                 runOnUiThread(() -> {
                     progressDialog.dismiss();
-                    updateStatus("❌ Telegram Error: " + e.getMessage());
+                    showProgressBar(false);
+                    updateStatus("❌ Telegram Error: " + e.getMessage() + 
+                                "\n\nCheck your internet connection and try again.");
                 });
             }
         }).start();
@@ -394,18 +484,26 @@ public class MainActivity extends AppCompatActivity {
         try {
             body.put("chat_id", chatId);
             body.put("text", message);
+            body.put("parse_mode", "HTML");
         } catch (Exception e) {
-            throw new IOException("Error creating message");
+            throw new IOException("Error creating Telegram message: " + e.getMessage());
         }
 
         Request request = new Request.Builder()
                 .url(url)
+                .header("Content-Type", "application/json")
                 .post(RequestBody.create(body.toString(), MediaType.parse("application/json")))
                 .build();
 
         try (Response response = client.newCall(request).execute()) {
             return response.code() == 200;
         }
+    }
+
+    private void showProgressBar(boolean show) {
+        runOnUiThread(() -> {
+            progressBar.setVisibility(show ? View.VISIBLE : View.GONE);
+        });
     }
 
     private void showProgressDialog(String message) {
@@ -427,5 +525,13 @@ public class MainActivity extends AppCompatActivity {
         runOnUiThread(() -> {
             Toast.makeText(this, message, Toast.LENGTH_LONG).show();
         });
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (progressDialog != null && progressDialog.isShowing()) {
+            progressDialog.dismiss();
+        }
     }
 }
