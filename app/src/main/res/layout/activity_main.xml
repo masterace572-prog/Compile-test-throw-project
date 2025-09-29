@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/bg_gradient"
+    android:background="#0F172A"
     android:padding="16dp">
 
     <LinearLayout
@@ -21,10 +21,11 @@
             android:layout_marginBottom="32dp"
             android:padding="8dp">
 
-            <ImageView
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:src="@drawable/ic_rocket"
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="🚀"
+                android:textSize="40sp"
                 android:layout_marginEnd="16dp" />
 
             <LinearLayout
@@ -73,151 +74,91 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="GitHub Repository"
+                    android:text="📦 GitHub Repository"
                     android:textColor="#FFFFFF"
                     android:textSize="16sp"
                     android:textStyle="bold"
                     android:layout_marginBottom="12dp" />
 
-                <com.google.android.material.textfield.TextInputLayout
+                <EditText
+                    android:id="@+id/repoUrlInput"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="16dp"
-                    app:boxBackgroundMode="outline"
-                    app:boxBackgroundColor="#0F172A"
-                    app:boxCornerRadiusBottomEnd="12dp"
-                    app:boxCornerRadiusBottomStart="12dp"
-                    app:boxCornerRadiusTopEnd="12dp"
-                    app:boxCornerRadiusTopStart="12dp"
-                    app:boxStrokeColor="#475569"
-                    app:hintTextColor="#94A3B8"
-                    app:startIconDrawable="@drawable/ic_github"
-                    app:startIconTint="#94A3B8">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/repoUrlInput"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="https://github.com/username/repository"
-                        android:textColor="#FFFFFF"
-                        android:textSize="15sp"
-                        android:padding="16dp" />
-
-                </com.google.android.material.textfield.TextInputLayout>
+                    android:hint="https://github.com/username/repository"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#94A3B8"
+                    android:textSize="15sp"
+                    android:background="#0F172A"
+                    android:padding="16dp"
+                    android:layout_marginBottom="16dp" />
 
                 <!-- GitHub Token Input -->
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="GitHub Token"
+                    android:text="🔑 GitHub Token"
                     android:textColor="#FFFFFF"
                     android:textSize="16sp"
                     android:textStyle="bold"
                     android:layout_marginBottom="12dp" />
 
-                <com.google.android.material.textfield.TextInputLayout
+                <EditText
+                    android:id="@+id/githubTokenInput"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="16dp"
-                    app:boxBackgroundMode="outline"
-                    app:boxBackgroundColor="#0F172A"
-                    app:boxCornerRadiusBottomEnd="12dp"
-                    app:boxCornerRadiusBottomStart="12dp"
-                    app:boxCornerRadiusTopEnd="12dp"
-                    app:boxCornerRadiusTopStart="12dp"
-                    app:boxStrokeColor="#475569"
-                    app:hintTextColor="#94A3B8"
-                    app:startIconDrawable="@drawable/ic_key"
-                    app:startIconTint="#94A3B8"
-                    app:endIconMode="password_toggle"
-                    app:endIconTint="#94A3B8">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/githubTokenInput"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="ghp_xxxxxxxxxxxxxxxxxxxx"
-                        android:textColor="#FFFFFF"
-                        android:textSize="15sp"
-                        android:inputType="textPassword"
-                        android:padding="16dp" />
-
-                </com.google.android.material.textfield.TextInputLayout>
+                    android:hint="ghp_xxxxxxxxxxxxxxxxxxxx"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#94A3B8"
+                    android:textSize="15sp"
+                    android:background="#0F172A"
+                    android:inputType="textPassword"
+                    android:padding="16dp"
+                    android:layout_marginBottom="16dp" />
 
                 <!-- Telegram Bot Token -->
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Telegram Bot Token"
+                    android:text="🤖 Telegram Bot Token"
                     android:textColor="#FFFFFF"
                     android:textSize="16sp"
                     android:textStyle="bold"
                     android:layout_marginBottom="12dp" />
 
-                <com.google.android.material.textfield.TextInputLayout
+                <EditText
+                    android:id="@+id/botTokenInput"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="16dp"
-                    app:boxBackgroundMode="outline"
-                    app:boxBackgroundColor="#0F172A"
-                    app:boxCornerRadiusBottomEnd="12dp"
-                    app:boxCornerRadiusBottomStart="12dp"
-                    app:boxCornerRadiusTopEnd="12dp"
-                    app:boxCornerRadiusTopStart="12dp"
-                    app:boxStrokeColor="#475569"
-                    app:hintTextColor="#94A3B8"
-                    app:startIconDrawable="@drawable/ic_telegram"
-                    app:startIconTint="#94A3B8"
-                    app:endIconMode="password_toggle"
-                    app:endIconTint="#94A3B8">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/botTokenInput"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
-                        android:textColor="#FFFFFF"
-                        android:textSize="15sp"
-                        android:inputType="textPassword"
-                        android:padding="16dp" />
-
-                </com.google.android.material.textfield.TextInputLayout>
+                    android:hint="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#94A3B8"
+                    android:textSize="15sp"
+                    android:background="#0F172A"
+                    android:inputType="textPassword"
+                    android:padding="16dp"
+                    android:layout_marginBottom="16dp" />
 
                 <!-- User ID Input -->
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Telegram User ID"
+                    android:text="👤 Telegram User ID"
                     android:textColor="#FFFFFF"
                     android:textSize="16sp"
                     android:textStyle="bold"
                     android:layout_marginBottom="12dp" />
 
-                <com.google.android.material.textfield.TextInputLayout
+                <EditText
+                    android:id="@+id/userIdInput"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    app:boxBackgroundMode="outline"
-                    app:boxBackgroundColor="#0F172A"
-                    app:boxCornerRadiusBottomEnd="12dp"
-                    app:boxCornerRadiusBottomStart="12dp"
-                    app:boxCornerRadiusTopEnd="12dp"
-                    app:boxCornerRadiusTopStart="12dp"
-                    app:boxStrokeColor="#475569"
-                    app:hintTextColor="#94A3B8"
-                    app:startIconDrawable="@drawable/ic_user"
-                    app:startIconTint="#94A3B8">
-
-                    <com.google.android.material.textfield.TextInputEditText
-                        android:id="@+id/userIdInput"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="123456789"
-                        android:textColor="#FFFFFF"
-                        android:textSize="15sp"
-                        android:inputType="number"
-                        android:padding="16dp" />
-
-                </com.google.android.material.textfield.TextInputLayout>
+                    android:hint="123456789"
+                    android:textColor="#FFFFFF"
+                    android:textColorHint="#94A3B8"
+                    android:textSize="15sp"
+                    android:background="#0F172A"
+                    android:inputType="number"
+                    android:padding="16dp" />
 
             </LinearLayout>
 
@@ -241,40 +182,26 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Build Configuration"
+                    android:text="⚙️ Build Configuration"
                     android:textColor="#FFFFFF"
                     android:textSize="16sp"
                     android:textStyle="bold"
                     android:layout_marginBottom="16dp" />
 
-                <com.google.android.material.textfield.TextInputLayout
+                <Spinner
+                    android:id="@+id/buildTypeSpinner"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
-                    app:boxBackgroundColor="#0F172A"
-                    app:boxStrokeColor="#475569"
-                    app:hintTextColor="#94A3B8"
-                    app:startIconDrawable="@drawable/ic_build"
-                    app:startIconTint="#94A3B8">
-
-                    <AutoCompleteTextView
-                        android:id="@+id/buildTypeSpinner"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="Select Build Type"
-                        android:textColor="#FFFFFF"
-                        android:textSize="15sp"
-                        android:padding="16dp"
-                        android:background="@null" />
-
-                </com.google.android.material.textfield.TextInputLayout>
+                    android:background="#0F172A"
+                    android:padding="16dp"
+                    android:textColor="#FFFFFF" />
 
             </LinearLayout>
 
         </androidx.cardview.widget.CardView>
 
         <!-- Action Buttons -->
-        <com.google.android.material.button.MaterialButton
+        <Button
             android:id="@+id/buildBtn"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -282,30 +209,19 @@
             android:textColor="#FFFFFF"
             android:textSize="16sp"
             android:textStyle="bold"
-            android:letterSpacing="0.05"
+            android:background="#10B981"
             android:paddingVertical="18dp"
-            app:icon="@drawable/ic_rocket"
-            app:iconGravity="textStart"
-            app:iconPadding="8dp"
-            app:cornerRadius="14dp"
-            app:backgroundTint="#10B981"
-            app:rippleColor="#059669"
             android:layout_marginBottom="12dp" />
 
-        <com.google.android.material.button.MaterialButton
+        <Button
             android:id="@+id/testConnectionBtn"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="🔗 TEST TELEGRAM CONNECTION"
             android:textColor="#FFFFFF"
             android:textSize="14sp"
+            android:background="#3B82F6"
             android:paddingVertical="16dp"
-            app:icon="@drawable/ic_telegram"
-            app:iconGravity="textStart"
-            app:iconPadding="6dp"
-            app:cornerRadius="12dp"
-            app:backgroundTint="#3B82F6"
-            app:rippleColor="#2563EB"
             android:layout_marginBottom="24dp" />
 
         <!-- Status Card -->
