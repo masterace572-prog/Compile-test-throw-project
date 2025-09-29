@@ -8,9 +8,12 @@ import android.view.View;
 import android.widget.*;
 import androidx.appcompat.app.AppCompatActivity;
 import okhttp3.*;
+import org.json.JSONArray;
 import org.json.JSONObject;
 import org.json.JSONException;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -19,9 +22,9 @@ import java.util.regex.Matcher;
 
 public class MainActivity extends AppCompatActivity {
 
-    private EditText repoUrlInput, githubTokenInput, botTokenInput, userIdInput;
-    private Spinner buildTypeSpinner;
-    private Button buildBtn, testConnectionBtn;
+    private EditText githubTokenInput, botTokenInput, userIdInput;
+    private Spinner repoSpinner, buildTypeSpinner;
+    private Button buildBtn, testConnectionBtn, fetchReposBtn;
     private TextView statusText;
     private ProgressBar progressBar;
     private ProgressDialog progressDialog;
@@ -38,7 +41,9 @@ public class MainActivity extends AppCompatActivity {
     private String lastWorkflowRunId = "";
     private int currentStage = 0;
     private long buildStartTime = 0;
-    private String lastMessageId = ""; // Store the message ID to edit it
+    private String lastMessageId = "";
+    
+    private List<GitHubRepo> repoList = new ArrayList<>();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -51,53 +56,167 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void initializeViews() {
-        repoUrlInput = findViewById(R.id.repoUrlInput);
         githubTokenInput = findViewById(R.id.githubTokenInput);
         botTokenInput = findViewById(R.id.botTokenInput);
         userIdInput = findViewById(R.id.userIdInput);
+        repoSpinner = findViewById(R.id.repoSpinner);
         buildTypeSpinner = findViewById(R.id.buildTypeSpinner);
         buildBtn = findViewById(R.id.buildBtn);
         testConnectionBtn = findViewById(R.id.testConnectionBtn);
+        fetchReposBtn = findViewById(R.id.fetchReposBtn);
         statusText = findViewById(R.id.statusText);
         progressBar = findViewById(R.id.progressBar);
 
-        ArrayAdapter<CharSequence> adapter = ArrayAdapter.createFromResource(this,
+        // Setup build type spinner
+        ArrayAdapter<CharSequence> buildAdapter = ArrayAdapter.createFromResource(this,
                 R.array.build_types, android.R.layout.simple_spinner_item);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        buildTypeSpinner.setAdapter(adapter);
+        buildAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        buildTypeSpinner.setAdapter(buildAdapter);
+
+        // Setup repo spinner with empty adapter initially
+        ArrayAdapter<String> repoAdapter = new ArrayAdapter<>(this, 
+                android.R.layout.simple_spinner_item, new ArrayList<String>());
+        repoAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        repoSpinner.setAdapter(repoAdapter);
 
         buildBtn.setOnClickListener(v -> startBuildProcess());
         testConnectionBtn.setOnClickListener(v -> testTelegramConnection());
+        fetchReposBtn.setOnClickListener(v -> fetchRepositories());
 
-        statusText.setText("🚀 Ready to build Android projects!\n\nEnter your details above to start building.");
+        statusText.setText("🚀 Ready to build Android projects!\n\nEnter your GitHub token and click 'Fetch Repositories' to start.");
+        
+        // Disable build button until repo is selected
+        buildBtn.setEnabled(false);
+    }
+
+    private void fetchRepositories() {
+        String githubToken = githubTokenInput.getText().toString().trim();
+        
+        if (githubToken.isEmpty()) {
+            showToast("Please enter GitHub token first");
+            return;
+        }
+
+        showProgressDialog("Fetching your repositories...");
+        
+        new Thread(() -> {
+            try {
+                List<GitHubRepo> repos = getGitHubRepositories(githubToken);
+                repoList = repos;
+                
+                runOnUiThread(() -> {
+                    progressDialog.dismiss();
+                    
+                    if (repos.isEmpty()) {
+                        updateStatus("❌ No repositories found\n\n" +
+                                   "Make sure:\n• GitHub token has repo scope\n• You have accessible repositories\n• Token is valid");
+                        showToast("No repositories found");
+                        return;
+                    }
+                    
+                    // Update spinner with repository names
+                    List<String> repoNames = new ArrayList<>();
+                    for (GitHubRepo repo : repos) {
+                        repoNames.add(repo.getFullName());
+                    }
+                    
+                    ArrayAdapter<String> adapter = new ArrayAdapter<>(MainActivity.this,
+                            android.R.layout.simple_spinner_item, repoNames);
+                    adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+                    repoSpinner.setAdapter(adapter);
+                    
+                    // Enable build button
+                    buildBtn.setEnabled(true);
+                    
+                    updateStatus("✅ Found " + repos.size() + " repositories!\n\n" +
+                               "Select a repository from the dropdown and click 'START BUILD'");
+                    showToast("Found " + repos.size() + " repositories!");
+                });
+                
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    progressDialog.dismiss();
+                    updateStatus("❌ Failed to fetch repositories\n\nError: " + e.getMessage() + 
+                               "\n\nCheck:\n• GitHub token permissions\n• Internet connection\n• Token validity");
+                    showToast("Failed to fetch repositories");
+                });
+            }
+        }).start();
+    }
+
+    private List<GitHubRepo> getGitHubRepositories(String token) throws IOException {
+        List<GitHubRepo> repos = new ArrayList<>();
+        String url = "https://api.github.com/user/repos?per_page=100&sort=updated";
+        
+        Request request = new Request.Builder()
+                .url(url)
+                .header("Authorization", "token " + token)
+                .header("Accept", "application/vnd.github.v3+json")
+                .build();
+
+        try (Response response = client.newCall(request).execute()) {
+            if (response.code() == 200) {
+                String body = response.body().string();
+                JSONArray jsonArray = new JSONArray(body);
+                
+                for (int i = 0; i < jsonArray.length(); i++) {
+                    JSONObject repoJson = jsonArray.getJSONObject(i);
+                    String name = repoJson.getString("name");
+                    String fullName = repoJson.getString("full_name");
+                    String owner = repoJson.getJSONObject("owner").getString("login");
+                    boolean isPrivate = repoJson.getBoolean("private");
+                    String defaultBranch = repoJson.getString("default_branch");
+                    
+                    // Only include repos that likely have Android projects
+                    if (isLikelyAndroidRepo(repoJson)) {
+                        repos.add(new GitHubRepo(name, fullName, owner, isPrivate, defaultBranch));
+                    }
+                }
+            } else {
+                throw new IOException("Failed to fetch repositories: " + response.code());
+            }
+        } catch (JSONException e) {
+            throw new IOException("Error parsing repository data: " + e.getMessage());
+        }
+        
+        return repos;
+    }
+
+    private boolean isLikelyAndroidRepo(JSONObject repoJson) throws JSONException {
+        // Check if repo has common Android files
+        String name = repoJson.getString("name").toLowerCase();
+        
+        // Include all repos for now, but we could filter for Android-specific ones
+        // Common Android repo patterns
+        return true; // Include all repos for maximum flexibility
     }
 
     private void startBuildProcess() {
-        final String repoUrl = repoUrlInput.getText().toString().trim();
+        if (repoList.isEmpty() || repoSpinner.getSelectedItemPosition() < 0) {
+            showToast("Please fetch and select a repository first");
+            return;
+        }
+
         final String githubToken = githubTokenInput.getText().toString().trim();
         final String botToken = botTokenInput.getText().toString().trim();
         final String userId = userIdInput.getText().toString().trim();
         final String buildType = buildTypeSpinner.getSelectedItem().toString().toLowerCase();
 
-        if (repoUrl.isEmpty() || githubToken.isEmpty() || botToken.isEmpty() || userId.isEmpty()) {
+        if (githubToken.isEmpty() || botToken.isEmpty() || userId.isEmpty()) {
             showToast("Please fill all required fields");
             return;
         }
 
-        final String[] repoInfo = extractRepoInfo(repoUrl);
-        if (repoInfo == null) {
-            showToast("Invalid GitHub URL. Use: https://github.com/username/repository");
-            return;
-        }
-
-        currentRepoOwner = repoInfo[0];
-        currentRepoName = repoInfo[1];
+        // Get selected repository
+        GitHubRepo selectedRepo = repoList.get(repoSpinner.getSelectedItemPosition());
+        currentRepoOwner = selectedRepo.getOwner();
+        currentRepoName = selectedRepo.getName();
         currentBuildType = buildType;
         currentBotToken = botToken;
         currentUserId = userId;
         currentStage = 0;
         buildStartTime = System.currentTimeMillis();
-        lastMessageId = ""; // Reset message ID
+        lastMessageId = "";
 
         showProgressDialog("Setting up build environment...");
         showProgressBar(true);
@@ -162,6 +281,31 @@ public class MainActivity extends AppCompatActivity {
             }
         }).start();
     }
+
+    // GitHub Repo data class
+    private static class GitHubRepo {
+        private String name;
+        private String fullName;
+        private String owner;
+        private boolean isPrivate;
+        private String defaultBranch;
+
+        public GitHubRepo(String name, String fullName, String owner, boolean isPrivate, String defaultBranch) {
+            this.name = name;
+            this.fullName = fullName;
+            this.owner = owner;
+            this.isPrivate = isPrivate;
+            this.defaultBranch = defaultBranch;
+        }
+
+        public String getName() { return name; }
+        public String getFullName() { return fullName; }
+        public String getOwner() { return owner; }
+        public boolean isPrivate() { return isPrivate; }
+        public String getDefaultBranch() { return defaultBranch; }
+    }
+
+    // ... (Keep all the existing methods from the previous version: sendInitialTelegramMessage, updateTelegramMessage, createTelegramMessage, startRealTimeStatusUpdates, getBuildStageStatus, getTelegramStatus, getTelegramDetails, getElapsedTime, updateStatusAndTelegram, sendTelegramMessage, editTelegramMessage, verifyRepoAccess, setupWorkflow, getFileSha, triggerWorkflow, generateWorkflowYaml, testTelegramConnection, showProgressBar, showProgressDialog, updateStatus, showToast, onDestroy)
 
     private void sendInitialTelegramMessage() {
         new Thread(() -> {
@@ -387,8 +531,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    // ... (keep all the other existing methods the same: verifyRepoAccess, setupWorkflow, getFileSha, triggerWorkflow, generateWorkflowYaml, extractRepoInfo, testTelegramConnection, showProgressBar, showProgressDialog, updateStatus, showToast, onDestroy)
-
     private boolean verifyRepoAccess(String token) throws IOException {
         String url = "https://api.github.com/repos/" + currentRepoOwner + "/" + currentRepoName;
         Request request = new Request.Builder()
@@ -560,21 +702,6 @@ public class MainActivity extends AppCompatActivity {
                 "        echo \"Build Type: " + buildType + "\"\n" +
                 "        echo \"APK Path: ${{ steps.find_apk.outputs.APK_PATH }}\"\n" +
                 "        echo \"Status: ${{ job.status }}\"";
-    }
-
-    private String[] extractRepoInfo(String repoUrl) {
-        try {
-            String pattern = "github.com[/:]([^/]+)/([^/.]+)";
-            Pattern r = Pattern.compile(pattern);
-            Matcher m = r.matcher(repoUrl);
-            
-            if (m.find()) {
-                return new String[]{m.group(1), m.group(2).replace(".git", "")};
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-        return null;
     }
 
     private void testTelegramConnection() {
