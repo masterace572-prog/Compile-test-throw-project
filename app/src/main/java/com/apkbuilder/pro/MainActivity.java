@@ -7,7 +7,6 @@ import android.os.Looper;
 import android.view.View;
 import android.widget.*;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.cardview.widget.CardView;
 import okhttp3.*;
 import org.json.JSONObject;
 import org.json.JSONException;
@@ -20,9 +19,9 @@ import java.util.regex.Matcher;
 
 public class MainActivity extends AppCompatActivity {
 
-    private TextInputEditText repoUrlInput, githubTokenInput, botTokenInput, userIdInput;
-    private AutoCompleteTextView buildTypeSpinner;
-    private MaterialButton buildBtn, testConnectionBtn;
+    private EditText repoUrlInput, githubTokenInput, botTokenInput, userIdInput;
+    private Spinner buildTypeSpinner;
+    private Button buildBtn, testConnectionBtn;
     private TextView statusText;
     private ProgressBar progressBar;
     private ProgressDialog progressDialog;
@@ -65,7 +64,6 @@ public class MainActivity extends AppCompatActivity {
                 R.array.build_types, android.R.layout.simple_spinner_item);
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         buildTypeSpinner.setAdapter(adapter);
-        buildTypeSpinner.setText("Debug", false);
 
         buildBtn.setOnClickListener(v -> startBuildProcess());
         testConnectionBtn.setOnClickListener(v -> testTelegramConnection());
@@ -78,7 +76,7 @@ public class MainActivity extends AppCompatActivity {
         final String githubToken = githubTokenInput.getText().toString().trim();
         final String botToken = botTokenInput.getText().toString().trim();
         final String userId = userIdInput.getText().toString().trim();
-        final String buildType = buildTypeSpinner.getText().toString().toLowerCase();
+        final String buildType = buildTypeSpinner.getSelectedItem().toString().toLowerCase();
 
         if (repoUrl.isEmpty() || githubToken.isEmpty() || botToken.isEmpty() || userId.isEmpty()) {
             showToast("Please fill all required fields");
