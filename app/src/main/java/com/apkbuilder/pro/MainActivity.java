@@ -2,6 +2,8 @@ package com.apkbuilder.pro;
 
 import android.app.ProgressDialog;
 import android.os.Bundle;
+import android.widget.ProgressBar;
+import android.view.View;
 import android.widget.*;
 import androidx.appcompat.app.AppCompatActivity;
 import com.google.android.material.button.MaterialButton;
