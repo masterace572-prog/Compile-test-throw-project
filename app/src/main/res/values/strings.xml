@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">APK Builder Pro</string>
+    <string-array name="build_types">
+        <item>Debug</item>
+        <item>Release</item>
+        <item>Both</item>
+    </string-array>
+    <string name="start_build">Start Automated Build</string>
+    <string name="check_status">Check Build Status</string>
+    <string name="repo_url_hint">https://github.com/username/repository</string>
+    <string name="github_token_hint">GitHub Token with repo permissions</string>
+    <string name="bot_token_hint">Telegram Bot Token</string>
+    <string name="user_id_hint">Telegram User ID</string>
+    <string name="build_type_hint">debug, release, etc.</string>
+</resources>

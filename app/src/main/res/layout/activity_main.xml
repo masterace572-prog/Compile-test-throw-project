@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#0F1116"
+    android:padding="16dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- App Title -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🚀 APK Builder Pro"
+            android:textColor="#FFFFFF"
+            android:textSize="28sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:layout_marginBottom="32dp"
+            android:padding="16dp" />
+
+        <!-- GitHub Repo Input -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="GitHub Repository URL:"
+            android:textColor="#E1E1E1"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp" />
+
+        <EditText
+            android:id="@+id/repoUrlInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="https://github.com/username/repository"
+            android:textColorHint="#888888"
+            android:textColor="#FFFFFF"
+            android:background="#1E1E2E"
+            android:padding="16dp"
+            android:layout_marginBottom="24dp" />
+
+        <!-- GitHub Token Input -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="GitHub Token:"
+            android:textColor="#E1E1E1"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp" />
+
+        <EditText
+            android:id="@+id/githubTokenInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="ghp_xxxxxxxxxxxxxxxxxxxx"
+            android:textColorHint="#888888"
+            android:textColor="#FFFFFF"
+            android:background="#1E1E2E"
+            android:padding="16dp"
+            android:layout_marginBottom="24dp"
+            android:inputType="textPassword" />
+
+        <!-- Bot Token Input -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Telegram Bot Token:"
+            android:textColor="#E1E1E1"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp" />
+
+        <EditText
+            android:id="@+id/botTokenInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
+            android:textColorHint="#888888"
+            android:textColor="#FFFFFF"
+            android:background="#1E1E2E"
+            android:padding="16dp"
+            android:layout_marginBottom="24dp"
+            android:inputType="textPassword" />
+
+        <!-- User ID Input -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Telegram User ID:"
+            android:textColor="#E1E1E1"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp" />
+
+        <EditText
+            android:id="@+id/userIdInput"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="123456789"
+            android:textColorHint="#888888"
+            android:textColor="#FFFFFF"
+            android:background="#1E1E2E"
+            android:padding="16dp"
+            android:layout_marginBottom="24dp"
+            android:inputType="number" />
+
+        <!-- Build Type Spinner -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Build Type:"
+            android:textColor="#E1E1E1"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp" />
+
+        <Spinner
+            android:id="@+id/buildTypeSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#1E1E2E"
+            android:padding="16dp"
+            android:layout_marginBottom="32dp" />
+
+        <!-- Action Buttons -->
+        <Button
+            android:id="@+id/buildBtn"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="🚀 Start Build"
+            android:textColor="#FFFFFF"
+            android:backgroundTint="#4CAF50"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:padding="16dp"
+            android:layout_marginBottom="16dp" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:weightSum="2">
+
+            <Button
+                android:id="@+id/checkStatusBtn"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="📊 Check Status"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#2196F3"
+                android:textSize="14sp"
+                android:padding="12dp"
+                android:layout_marginEnd="8dp" />
+
+            <Button
+                android:id="@+id/testConnectionBtn"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="🔗 Test Telegram"
+                android:textColor="#FFFFFF"
+                android:backgroundTint="#FF9800"
+                android:textSize="14sp"
+                android:padding="12dp"
+                android:layout_marginStart="8dp" />
+
+        </LinearLayout>
+
+        <!-- Status Display -->
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Ready to build"
+            android:textColor="#CCCCCC"
+            android:textSize="14sp"
+            android:lineSpacingExtra="6dp"
+            android:background="#1A1A2E"
+            android:padding="20dp"
+            android:layout_marginTop="24dp" />
+
+    </LinearLayout>
+
+</ScrollView>

@@ -1,0 +1,421 @@
+package com.apkbuilder.pro;
+
+import android.app.ProgressDialog;
+import android.os.Bundle;
+import android.widget.*;
+import androidx.appcompat.app.AppCompatActivity;
+import com.apkbuilder.pro.models.WorkflowResponse;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
+
+public class MainActivity extends AppCompatActivity {
+
+    private EditText repoUrlInput, githubTokenInput, botTokenInput, userIdInput, buildTypeInput;
+    private Button buildBtn, checkStatusBtn, testConnectionBtn, cancelBuildBtn;
+    private TextView statusText;
+    private ProgressDialog progressDialog;
+    
+    private GitHubService githubService;
+    private TelegramService telegramService;
+    
+    private String currentRepoOwner = "";
+    private String currentRepoName = "";
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+        
+        initializeViews();
+        initializeServices();
+    }
+
+    private void initializeViews() {
+        repoUrlInput = findViewById(R.id.repoUrlInput);
+        githubTokenInput = findViewById(R.id.githubTokenInput);
+        botTokenInput = findViewById(R.id.botTokenInput);
+        userIdInput = findViewById(R.id.userIdInput);
+        buildTypeInput = findViewById(R.id.buildTypeInput);
+        buildBtn = findViewById(R.id.buildBtn);
+        checkStatusBtn = findViewById(R.id.checkStatusBtn);
+        testConnectionBtn = findViewById(R.id.testConnectionBtn);
+        cancelBuildBtn = findViewById(R.id.cancelBuildBtn);
+        statusText = findViewById(R.id.statusText);
+
+        buildBtn.setOnClickListener(v -> startCompleteBuildProcess());
+        checkStatusBtn.setOnClickListener(v -> checkBuildStatus());
+        testConnectionBtn.setOnClickListener(v -> testTelegramConnection());
+        cancelBuildBtn.setOnClickListener(v -> cancelCurrentBuild());
+
+        // Initially hide cancel button
+        cancelBuildBtn.setVisibility(android.view.View.GONE);
+    }
+
+    private void initializeServices() {
+        githubService = new GitHubService();
+        telegramService = new TelegramService();
+    }
+
+    private void startCompleteBuildProcess() {
+        // Make final copies of the variables for use in lambda
+        final String repoUrl = repoUrlInput.getText().toString().trim();
+        final String githubToken = githubTokenInput.getText().toString().trim();
+        final String botToken = botTokenInput.getText().toString().trim();
+        final String userId = userIdInput.getText().toString().trim();
+        String buildTypeTemp = buildTypeInput.getText().toString().trim();
+        final String buildType = buildTypeTemp.isEmpty() ? "debug" : buildTypeTemp;
+
+        if (repoUrl.isEmpty() || githubToken.isEmpty() || botToken.isEmpty() || userId.isEmpty()) {
+            showToast("Please fill all required fields");
+            return;
+        }
+
+        final String[] repoInfo = extractRepoInfo(repoUrl);
+        if (repoInfo == null) {
+            showToast("Invalid GitHub repository URL format. Use: https://github.com/username/repository");
+            return;
+        }
+
+        currentRepoOwner = repoInfo[0];
+        currentRepoName = repoInfo[1];
+
+        showProgressDialog("Setting up complete automated build...");
+
+        new Thread(() -> {
+            try {
+                // First, verify repository access
+                runOnUiThread(() -> {
+                    updateStatus("🔍 Verifying repository access...");
+                });
+                
+                boolean canAccessRepo = githubService.verifyRepositoryAccess(currentRepoOwner, currentRepoName, githubToken);
+                if (!canAccessRepo) {
+                    throw new Exception("Cannot access repository. Check:\n• Repository exists\n• Token has repo permissions\n• Repository is not archived");
+                }
+
+                // Step 1: Create or check workflow
+                runOnUiThread(() -> {
+                    updateStatus("📝 Setting up workflow...");
+                });
+                
+                boolean workflowReady = setupWorkflow(githubToken, botToken, userId, buildType);
+                if (!workflowReady) {
+                    throw new Exception("Failed to setup workflow");
+                }
+
+                // Small delay to ensure workflow is ready
+                Thread.sleep(2000);
+
+                // Step 2: Trigger workflow
+                runOnUiThread(() -> {
+                    updateStatus("🚀 Triggering workflow...");
+                });
+
+                WorkflowResponse triggerResponse = githubService.triggerWorkflow(currentRepoOwner, currentRepoName, githubToken);
+                if (!triggerResponse.isSuccess()) {
+                    throw new Exception("Failed to trigger workflow: " + triggerResponse.getMessage());
+                }
+
+                runOnUiThread(() -> {
+                    progressDialog.dismiss();
+                    updateStatus("✅ Build Started Successfully!\n\n" +
+                            "📦 Repository: " + currentRepoOwner + "/" + currentRepoName + "\n" +
+                            "🔨 Build Type: " + buildType + "\n" +
+                            "⚡ Status: " + triggerResponse.getStatus().toUpperCase() + "\n" +
+                            "🔗 Workflow: " + triggerResponse.getHtmlUrl() + "\n\n" +
+                            "⏰ Estimated time: 5-10 minutes\n\n" +
+                            "📱 APK will be sent to Telegram when ready");
+                    
+                    // Show cancel button
+                    cancelBuildBtn.setVisibility(android.view.View.VISIBLE);
+                    showToast("Build triggered successfully!");
+                });
+
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    progressDialog.dismiss();
+                    String errorMessage = e.getMessage();
+                    String detailedHelp = getDetailedHelp(errorMessage, repoUrl, githubToken);
+                    
+                    updateStatus("❌ Build Failed\n\n" +
+                            "Error: " + errorMessage + "\n\n" +
+                            detailedHelp);
+                    showToast("Build setup failed");
+                });
+            }
+        }).start();
+    }
+
+    private String getDetailedHelp(String error, String repoUrl, String token) {
+        StringBuilder help = new StringBuilder();
+        help.append("🔧 Troubleshooting:\n\n");
+        
+        if (error.contains("404") || error.contains("Not Found")) {
+            help.append("• 📝 Repository not found or no access\n");
+            help.append("• 🔑 Check GitHub token has 'repo' permission\n");
+            help.append("• 🌐 Verify repository URL is correct\n");
+            help.append("• 👤 Ensure token has access to this repo\n");
+        } else if (error.contains("403") || error.contains("Forbidden")) {
+            help.append("• 🔐 Token doesn't have required permissions\n");
+            help.append("• 📋 Needed: repo, workflow permissions\n");
+            help.append("• 🔄 Generate new token with correct scopes\n");
+        } else if (error.contains("401") || error.contains("Bad credentials")) {
+            help.append("• ❌ Invalid GitHub token\n");
+            help.append("• 🔑 Generate new token at: GitHub Settings → Developer settings → Personal access tokens\n");
+        }
+        
+        help.append("\n💡 Quick Checks:\n");
+        help.append("• Visit: ").append(repoUrl).append("\n");
+        help.append("• Ensure repository exists and is accessible\n");
+        help.append("• Token should start with 'ghp_' or 'github_pat_'\n");
+        help.append("• Repository should not be archived\n");
+        
+        return help.toString();
+    }
+
+    private boolean setupWorkflow(String githubToken, String botToken, String userId, String buildType) {
+        try {
+            // Check if workflow already exists
+            boolean exists = githubService.workflowExists(currentRepoOwner, currentRepoName, githubToken);
+            
+            if (!exists) {
+                // Create new workflow
+                runOnUiThread(() -> {
+                    updateStatus("📄 Creating workflow file...");
+                });
+                
+                String workflowContent = generateCompleteWorkflowYaml(botToken, userId, buildType);
+                WorkflowResponse createResponse = githubService.createWorkflowFile(currentRepoOwner, currentRepoName, githubToken, workflowContent);
+                
+                if (!createResponse.isSuccess()) {
+                    throw new Exception("Failed to create workflow: " + createResponse.getMessage());
+                }
+                
+                runOnUiThread(() -> {
+                    updateStatus("✅ Workflow created successfully!");
+                });
+                
+                // Wait a bit for GitHub to register the new workflow
+                Thread.sleep(3000);
+            } else {
+                runOnUiThread(() -> {
+                    updateStatus("✅ Workflow already exists");
+                });
+            }
+            
+            return true;
+            
+        } catch (Exception e) {
+            throw new RuntimeException("Workflow setup failed: " + e.getMessage());
+        }
+    }
+
+    private String generateCompleteWorkflowYaml(String botToken, String userId, String buildType) {
+        // Fixed: Use proper YAML syntax without escape character issues
+        return "name: Android Build via APK Builder\n" +
+                "\n" +
+                "on:\n" +
+                "  workflow_dispatch:\n" +
+                "    inputs:\n" +
+                "      build_type:\n" +
+                "        description: 'Build Type'\n" +
+                "        required: true\n" +
+                "        default: 'debug'\n" +
+                "\n" +
+                "env:\n" +
+                "  BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}\n" +
+                "  USER_ID: ${{ secrets.TELEGRAM_USER_ID }}\n" +
+                "\n" +
+                "jobs:\n" +
+                "  build:\n" +
+                "    runs-on: ubuntu-latest\n" +
+                "\n" +
+                "    steps:\n" +
+                "    - name: Checkout code\n" +
+                "      uses: actions/checkout@v4\n" +
+                "\n" +
+                "    - name: Set up JDK 17\n" +
+                "      uses: actions/setup-java@v4\n" +
+                "      with:\n" +
+                "        java-version: '17'\n" +
+                "        distribution: 'temurin'\n" +
+                "\n" +
+                "    - name: Setup Android SDK\n" +
+                "      uses: android-actions/setup-android@v3\n" +
+                "\n" +
+                "    - name: Build APK\n" +
+                "      run: |\n" +
+                "        chmod +x gradlew\n" +
+                "        ./gradlew assemble" + buildType.substring(0, 1).toUpperCase() + buildType.substring(1) + "\n" +
+                "\n" +
+                "    - name: Find APK\n" +
+                "      id: find_apk\n" +
+                "      run: |\n" +
+                "        APK_PATH=$(find . -name \"*.apk\" | grep -v \"unsigned\" | head -1)\n" +
+                "        echo \"APK_PATH=$APK_PATH\" >> $GITHUB_OUTPUT\n" +
+                "        echo \"Found APK: $APK_PATH\"\n" +
+                "\n" +
+                "    - name: Send to Telegram\n" +
+                "      uses: appleboy/telegram-action@master\n" +
+                "      with:\n" +
+                "        to: ${{ env.USER_ID }}\n" +
+                "        token: ${{ env.BOT_TOKEN }}\n" +
+                "        document: ${{ steps.find_apk.outputs.APK_PATH }}\n" +
+                "        caption: \"🚀 APK Build Complete!\\n\\n\" +\n" +
+                "                \"📱 Build Type: " + buildType + "\\n\" +\n" +
+                "                \"🔗 Repository: ${{ github.repository }}\\n\" +\n" +
+                "                \"⚡ Built via APK Builder Pro\"";
+    }
+
+    private String[] extractRepoInfo(String repoUrl) {
+        try {
+            // Support various GitHub URL formats
+            String pattern = "github.com[/:]([^/]+)/([^/.]+)(?:\\.git)?";
+            Pattern r = Pattern.compile(pattern);
+            Matcher m = r.matcher(repoUrl);
+            
+            if (m.find()) {
+                String owner = m.group(1);
+                String repo = m.group(2);
+                
+                // Validate that we got proper values
+                if (owner != null && !owner.isEmpty() && repo != null && !repo.isEmpty()) {
+                    return new String[]{owner, repo};
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    private void checkBuildStatus() {
+        if (currentRepoOwner.isEmpty() || currentRepoName.isEmpty()) {
+            showToast("No build in progress. Start a build first.");
+            return;
+        }
+
+        final String githubToken = githubTokenInput.getText().toString().trim();
+        if (githubToken.isEmpty()) {
+            showToast("Please enter GitHub token");
+            return;
+        }
+
+        showProgressDialog("Checking build status...");
+
+        new Thread(() -> {
+            try {
+                WorkflowResponse statusResponse = githubService.getWorkflowStatus(currentRepoOwner, currentRepoName, githubToken);
+                
+                runOnUiThread(() -> {
+                    progressDialog.dismiss();
+                    
+                    if (statusResponse.isSuccess()) {
+                        updateStatus(statusResponse.getFormattedStatus());
+                        
+                        // Show/hide cancel button based on status
+                        if (statusResponse.isActive()) {
+                            cancelBuildBtn.setVisibility(android.view.View.VISIBLE);
+                        } else {
+                            cancelBuildBtn.setVisibility(android.view.View.GONE);
+                        }
+                        
+                        // Show appropriate toast message
+                        if (statusResponse.isActive()) {
+                            showToast("Build is in progress...");
+                        } else if (statusResponse.isSuccessful()) {
+                            showToast("Build completed successfully! Check Telegram for APK");
+                        } else if (statusResponse.isFailed()) {
+                            showToast("Build failed. Check GitHub for details");
+                        }
+                    } else {
+                        updateStatus("❌ Error checking status:\n" + statusResponse.getMessage());
+                        showToast("Failed to check status: " + statusResponse.getMessage());
+                    }
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    progressDialog.dismiss();
+                    updateStatus("❌ Error checking status:\n" + e.getMessage());
+                    showToast("Failed to check status: " + e.getMessage());
+                });
+            }
+        }).start();
+    }
+
+    private void cancelCurrentBuild() {
+        showToast("Cancel feature requires run ID tracking - checking status instead");
+        checkBuildStatus();
+    }
+
+    private void testTelegramConnection() {
+        final String botToken = botTokenInput.getText().toString().trim();
+        final String userId = userIdInput.getText().toString().trim();
+
+        if (botToken.isEmpty() || userId.isEmpty()) {
+            showToast("Please enter bot token and user ID");
+            return;
+        }
+
+        showProgressDialog("Testing Telegram connection...");
+
+        new Thread(() -> {
+            try {
+                boolean success = telegramService.testConnection(botToken, userId);
+                
+                runOnUiThread(() -> {
+                    progressDialog.dismiss();
+                    if (success) {
+                        updateStatus("✅ Telegram Connection Successful!\n\n" +
+                                "You should receive a test message in Telegram.\n" +
+                                "APK files will be sent to this chat when builds complete.");
+                        showToast("Telegram connection test successful!");
+                    } else {
+                        updateStatus("❌ Telegram Connection Failed\n\n" +
+                                "Please check:\n" +
+                                "• Bot token is correct\n" +
+                                "• User ID is correct\n" +
+                                "• Bot is started with /start\n" +
+                                "• You have sent a message to the bot");
+                        showToast("Telegram connection failed");
+                    }
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    progressDialog.dismiss();
+                    updateStatus("❌ Telegram Test Failed\n\nError: " + e.getMessage());
+                    showToast("Connection test failed: " + e.getMessage());
+                });
+            }
+        }).start();
+    }
+
+    private void showProgressDialog(String message) {
+        runOnUiThread(() -> {
+            progressDialog = new ProgressDialog(MainActivity.this);
+            progressDialog.setMessage(message);
+            progressDialog.setCancelable(false);
+            progressDialog.show();
+        });
+    }
+
+    private void updateStatus(String message) {
+        runOnUiThread(() -> {
+            statusText.setText(message);
+        });
+    }
+
+    private void showToast(String message) {
+        runOnUiThread(() -> {
+            Toast.makeText(MainActivity.this, message, Toast.LENGTH_LONG).show();
+        });
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (progressDialog != null && progressDialog.isShowing()) {
+            progressDialog.dismiss();
+        }
+    }
+}
