@@ -35,14 +35,14 @@ jobs:
       run: |
         chmod +x gradlew
         ./gradlew clean
-        ./gradlew assembleDebug
+        ./gradlew assemble
 
     - name: 🔍 Find APK
       id: find_apk
       run: |
         APK_PATH=$(find . -name "*.apk" | grep -v "unsigned" | head -1)
         if [ -z "$APK_PATH" ]; then
-          APK_PATH=$(find . -name "*debug*.apk" | head -1)
+          APK_PATH=$(find . -name "*both*.apk" | head -1)
         fi
         echo "APK_PATH=$APK_PATH" >> $GITHUB_OUTPUT
         echo "📱 Found APK: $APK_PATH"
@@ -57,7 +57,7 @@ jobs:
           🚀 APK Build Complete!
           
           📦 Project: ${{ github.repository }}
-          📱 Build Type: debug
+          📱 Build Type: both
           🔨 Built via APK Builder App
           ✅ Ready to install!
 
@@ -66,6 +66,6 @@ jobs:
       run: |
         echo "=== BUILD COMPLETE ==="
         echo "Repository: ${{ github.repository }}"
-        echo "Build Type: debug"
+        echo "Build Type: both"
         echo "APK Path: ${{ steps.find_apk.outputs.APK_PATH }}"
         echo "Status: ${{ job.status }}"
