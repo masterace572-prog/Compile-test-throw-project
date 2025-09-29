@@ -3,7 +3,7 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="#0F172A"
+    android:background="#10B981"
     android:padding="16dp">
 
     <LinearLayout
@@ -118,7 +118,7 @@
                     android:layout_height="wrap_content"
                     android:text="🔄 Fetch Repositories"
                     android:textColor="#FFFFFF"
-                    android:background="#3B82F6"
+                    android:background="#10B981"
                     android:paddingHorizontal="16dp"
                     android:paddingVertical="8dp"
                     android:layout_gravity="end" />
@@ -229,7 +229,7 @@
             android:text="🔗 TEST TELEGRAM CONNECTION"
             android:textColor="#FFFFFF"
             android:textSize="14sp"
-            android:background="#3B82F6"
+            android:background="#10B981"
             android:paddingVertical="16dp"
             android:layout_marginBottom="24dp" />
 
