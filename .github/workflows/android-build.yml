@@ -53,11 +53,13 @@ jobs:
         to: 7022875343
         token: 7704220520:AAEI_ouYgKUdt52-ec9JJDjdo44pme781Ls
         document: ${{ steps.find_apk.outputs.APK_PATH }}
-        caption: "🚀 APK Build Complete!\n\n" +
-                "📦 Project: ${{ github.repository }}\n" +
-                "📱 Build Type: debug\n" +
-                "🔨 Built via APK Builder App\n" +
-                "✅ Ready to install!"
+        caption: |
+          🚀 APK Build Complete!
+          
+          📦 Project: ${{ github.repository }}
+          📱 Build Type: debug
+          🔨 Built via APK Builder App
+          ✅ Ready to install!
 
     - name: 📊 Build Report
       if: always()
