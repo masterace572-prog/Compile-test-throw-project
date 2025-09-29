@@ -70,28 +70,6 @@
                 android:orientation="vertical"
                 android:padding="20dp">
 
-                <!-- Repository Input -->
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="📦 GitHub Repository"
-                    android:textColor="#FFFFFF"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="12dp" />
-
-                <EditText
-                    android:id="@+id/repoUrlInput"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="https://github.com/username/repository"
-                    android:textColor="#FFFFFF"
-                    android:textColorHint="#94A3B8"
-                    android:textSize="15sp"
-                    android:background="#0F172A"
-                    android:padding="16dp"
-                    android:layout_marginBottom="16dp" />
-
                 <!-- GitHub Token Input -->
                 <TextView
                     android:layout_width="match_parent"
@@ -115,6 +93,36 @@
                     android:padding="16dp"
                     android:layout_marginBottom="16dp" />
 
+                <!-- Repository Selection -->
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="📦 Select Repository"
+                    android:textColor="#FFFFFF"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="12dp" />
+
+                <Spinner
+                    android:id="@+id/repoSpinner"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="#0F172A"
+                    android:padding="16dp"
+                    android:textColor="#FFFFFF"
+                    android:layout_marginBottom="8dp" />
+
+                <Button
+                    android:id="@+id/fetchReposBtn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="🔄 Fetch Repositories"
+                    android:textColor="#FFFFFF"
+                    android:background="#3B82F6"
+                    android:paddingHorizontal="16dp"
+                    android:paddingVertical="8dp"
+                    android:layout_gravity="end" />
+
                 <!-- Telegram Bot Token -->
                 <TextView
                     android:layout_width="match_parent"
@@ -123,6 +131,7 @@
                     android:textColor="#FFFFFF"
                     android:textSize="16sp"
                     android:textStyle="bold"
+                    android:layout_marginTop="16dp"
                     android:layout_marginBottom="12dp" />
 
                 <EditText
@@ -252,7 +261,7 @@
                     android:id="@+id/statusText"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="🚀 Ready to build Android projects!\n\nEnter your details above to start building."
+                    android:text="🚀 Ready to build Android projects!\n\nEnter your GitHub token and click 'Fetch Repositories' to start."
                     android:textColor="#CBD5E1"
                     android:textSize="14sp"
                     android:lineSpacingExtra="6dp"
