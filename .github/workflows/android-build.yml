@@ -1,4 +1,4 @@
-name: Android CI with APK Builder
+name: Android CI with APK Builder Pro
 
 on:
   workflow_dispatch:
@@ -35,14 +35,14 @@ jobs:
       run: |
         chmod +x gradlew
         ./gradlew clean
-        ./gradlew assemble
+        ./gradlew assembleDebug
 
     - name: 🔍 Find APK
       id: find_apk
       run: |
         APK_PATH=$(find . -name "*.apk" | grep -v "unsigned" | head -1)
         if [ -z "$APK_PATH" ]; then
-          APK_PATH=$(find . -name "*both*.apk" | head -1)
+          APK_PATH=$(find . -name "*debug*.apk" | head -1)
         fi
         echo "APK_PATH=$APK_PATH" >> $GITHUB_OUTPUT
         echo "📱 Found APK: $APK_PATH"
@@ -51,14 +51,14 @@ jobs:
       uses: appleboy/telegram-action@master
       with:
         to: 7022875343
-        token: 7704220520:AAEI_ouYgKUdt52-ec9JJDjdo44pme781Ls
+        token: 8159650036:AAFujFSy1iO6ZDfKyGCOtESZYGD23PsyoWI
         document: ${{ steps.find_apk.outputs.APK_PATH }}
         caption: |
           🚀 APK Build Complete!
           
           📦 Project: ${{ github.repository }}
-          📱 Build Type: both
-          🔨 Built via APK Builder App
+          📱 Build Type: debug
+          🔨 Built via APK Builder Pro App
           ✅ Ready to install!
 
     - name: 📊 Build Report
@@ -66,6 +66,6 @@ jobs:
       run: |
         echo "=== BUILD COMPLETE ==="
         echo "Repository: ${{ github.repository }}"
-        echo "Build Type: both"
+        echo "Build Type: debug"
         echo "APK Path: ${{ steps.find_apk.outputs.APK_PATH }}"
         echo "Status: ${{ job.status }}"
