@@ -11,6 +11,7 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.textfield.TextInputEditText;
 import okhttp3.*;
 import org.json.JSONObject;
+import org.json.JSONException;
 import java.io.IOException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -347,8 +348,13 @@ public class MainActivity extends AppCompatActivity {
         try (Response response = client.newCall(request).execute()) {
             if (response.code() == 200) {
                 String body = response.body().string();
-                JSONObject json = new JSONObject(body);
-                return json.getString("sha");
+                try {
+                    JSONObject json = new JSONObject(body);
+                    return json.getString("sha");
+                } catch (JSONException e) {
+                    // If JSON parsing fails, return null
+                    return null;
+                }
             }
         } catch (Exception e) {
             // File doesn't exist, that's fine - we'll create new
@@ -395,10 +401,14 @@ public class MainActivity extends AppCompatActivity {
         try (Response response = client.newCall(request).execute()) {
             if (response.code() == 200) {
                 String body = response.body().string();
-                JSONObject json = new JSONObject(body);
-                if (json.getJSONArray("workflow_runs").length() > 0) {
-                    JSONObject run = json.getJSONArray("workflow_runs").getJSONObject(0);
-                    return run.getString("id");
+                try {
+                    JSONObject json = new JSONObject(body);
+                    if (json.getJSONArray("workflow_runs").length() > 0) {
+                        JSONObject run = json.getJSONArray("workflow_runs").getJSONObject(0);
+                        return run.getString("id");
+                    }
+                } catch (JSONException e) {
+                    throw new IOException("Failed to parse workflow run data: " + e.getMessage());
                 }
             }
             return null;
