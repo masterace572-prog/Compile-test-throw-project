@@ -38,6 +38,7 @@ public class MainActivity extends AppCompatActivity {
     private String lastWorkflowRunId = "";
     private int currentStage = 0;
     private long buildStartTime = 0;
+    private String lastMessageId = ""; // Store the message ID to edit it
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -96,6 +97,7 @@ public class MainActivity extends AppCompatActivity {
         currentUserId = userId;
         currentStage = 0;
         buildStartTime = System.currentTimeMillis();
+        lastMessageId = ""; // Reset message ID
 
         showProgressDialog("Setting up build environment...");
         showProgressBar(true);
@@ -104,7 +106,7 @@ public class MainActivity extends AppCompatActivity {
         new Thread(() -> {
             try {
                 // Step 1: Verify repository access
-                updateStatusAndTelegram("🔍 Checking repository access...", false);
+                updateStatusAndTelegram("🔍 Checking repository access...", true);
                 Thread.sleep(2000);
                 
                 if (!verifyRepoAccess(githubToken)) {
@@ -112,7 +114,7 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 // Step 2: Create or update workflow file
-                updateStatusAndTelegram("📝 Configuring workflow file...", false);
+                updateStatusAndTelegram("📝 Configuring workflow file...", true);
                 Thread.sleep(2000);
                 
                 if (!setupWorkflow(githubToken, botToken, userId, buildType)) {
@@ -120,7 +122,7 @@ public class MainActivity extends AppCompatActivity {
                 }
 
                 // Step 3: Trigger workflow
-                updateStatusAndTelegram("🚀 Triggering build workflow...", false);
+                updateStatusAndTelegram("🚀 Triggering build workflow...", true);
                 Thread.sleep(2000);
                 
                 String runId = triggerWorkflow(githubToken);
@@ -142,6 +144,9 @@ public class MainActivity extends AppCompatActivity {
                     showToast("Build started successfully! 🚀");
                 });
 
+                // Send initial Telegram message
+                sendInitialTelegramMessage();
+
                 // Start real-time status simulation
                 startRealTimeStatusUpdates();
 
@@ -158,6 +163,53 @@ public class MainActivity extends AppCompatActivity {
         }).start();
     }
 
+    private void sendInitialTelegramMessage() {
+        new Thread(() -> {
+            try {
+                String message = createTelegramMessage("🚀 Build Started", 
+                    "🏗️ Initializing build environment...\n⏰ Elapsed: " + getElapsedTime());
+                
+                // Send initial message and store the message ID
+                String messageId = sendTelegramMessage(currentBotToken, currentUserId, message);
+                if (messageId != null) {
+                    lastMessageId = messageId;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }).start();
+    }
+
+    private void updateTelegramMessage(String status, String details) {
+        new Thread(() -> {
+            try {
+                String message = createTelegramMessage(status, details);
+                
+                if (!lastMessageId.isEmpty()) {
+                    // Edit the existing message
+                    editTelegramMessage(currentBotToken, currentUserId, lastMessageId, message);
+                } else {
+                    // If no message ID stored, send a new one
+                    String messageId = sendTelegramMessage(currentBotToken, currentUserId, message);
+                    if (messageId != null) {
+                        lastMessageId = messageId;
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }).start();
+    }
+
+    private String createTelegramMessage(String status, String details) {
+        return "🤖 APK Builder Pro - Build Status\n\n" +
+               "📊 " + status + "\n\n" +
+               details + "\n\n" +
+               "📦 Repository: " + currentRepoOwner + "/" + currentRepoName + "\n" +
+               "🔨 Build Type: " + currentBuildType + "\n" +
+               "⏰ Elapsed: " + getElapsedTime();
+    }
+
     private void startRealTimeStatusUpdates() {
         if (statusScheduler != null && !statusScheduler.isShutdown()) {
             statusScheduler.shutdown();
@@ -172,19 +224,31 @@ public class MainActivity extends AppCompatActivity {
 
             currentStage++;
             String status = getBuildStageStatus(currentStage);
-            updateStatusAndTelegram(status, true);
+            
+            // Update app status
+            updateStatus(status);
+            
+            // Update Telegram message
+            String telegramStatus = getTelegramStatus(currentStage);
+            String telegramDetails = getTelegramDetails(currentStage);
+            updateTelegramMessage(telegramStatus, telegramDetails);
 
             // Simulate build completion after 8 stages
             if (currentStage >= 8) {
                 isBuildRunning = false;
                 statusScheduler.shutdown();
                 
-                // Simulate successful build completion
-                updateStatusAndTelegram("✅ BUILD COMPLETED SUCCESSFULLY! 🎉\n\n" +
+                // Final completion message
+                updateStatus("✅ BUILD COMPLETED SUCCESSFULLY! 🎉\n\n" +
                         "📦 APK has been built and sent to your Telegram!\n" +
                         "📱 Check your Telegram messages for the APK file.\n" +
                         "⏰ Total time: " + getElapsedTime() + "\n\n" +
-                        "🎯 Your APK is ready to install!", false);
+                        "🎯 Your APK is ready to install!");
+                
+                updateTelegramMessage("✅ Build Completed Successfully", 
+                    "📦 APK has been built and sent!\n" +
+                    "📱 Check your messages for the APK file.\n" +
+                    "🎯 Your APK is ready to install!");
                 
                 runOnUiThread(() -> {
                     showProgressBar(false);
@@ -217,31 +281,113 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private String getTelegramStatus(int stage) {
+        switch (stage) {
+            case 1: return "🏗️ Initializing Environment";
+            case 2: return "📥 Downloading SDK";
+            case 3: return "✅ Accepting Licenses";
+            case 4: return "⚙️ Setting Up Build System";
+            case 5: return "🔧 Configuring Project";
+            case 6: return "🏗️ Building APK";
+            case 7: return "📦 Packaging Application";
+            case 8: return "🚀 Finalizing Build";
+            default: return "🔄 Build In Progress";
+        }
+    }
+
+    private String getTelegramDetails(int stage) {
+        switch (stage) {
+            case 1: return "Setting up Android SDK and build tools...";
+            case 2: return "Downloading Android components and platforms...";
+            case 3: return "Configuring Android development environment...";
+            case 4: return "Preparing JDK and Gradle for compilation...";
+            case 5: return "Syncing project dependencies and configuration...";
+            case 6: return "Compiling source code and resources...";
+            case 7: return "Creating signed APK package...";
+            case 8: return "Finalizing build and preparing APK delivery...";
+            default: return "Build process is running...";
+        }
+    }
+
     private String getElapsedTime() {
         long elapsed = System.currentTimeMillis() - buildStartTime;
         long minutes = TimeUnit.MILLISECONDS.toMinutes(elapsed);
         return minutes + " minutes";
     }
 
-    private void updateStatusAndTelegram(String message, boolean isProgressUpdate) {
+    private void updateStatusAndTelegram(String message, boolean isInitial) {
         mainHandler.post(() -> {
             updateStatus(message);
         });
         
-        // Send to Telegram only for major updates
-        if (!isProgressUpdate || message.contains("✅") || message.contains("🚀") || message.contains("❌")) {
-            new Thread(() -> {
-                try {
-                    sendTelegramMessage(currentBotToken, currentUserId, 
-                        "🤖 APK Builder Pro - Build Status\n\n" + message + 
-                        "\n\n📦 Repository: " + currentRepoOwner + "/" + currentRepoName +
-                        "\n🔨 Build Type: " + currentBuildType);
-                } catch (Exception e) {
-                    // Ignore Telegram errors for status updates
-                }
-            }).start();
+        if (isInitial) {
+            // For initial setup steps, update Telegram
+            String status = "🔧 Build Setup";
+            String details = message;
+            updateTelegramMessage(status, details);
         }
     }
+
+    // Send Telegram message and return message ID
+    private String sendTelegramMessage(String botToken, String chatId, String message) throws IOException {
+        String url = "https://api.telegram.org/bot" + botToken + "/sendMessage";
+        
+        JSONObject body = new JSONObject();
+        try {
+            body.put("chat_id", chatId);
+            body.put("text", message);
+            body.put("parse_mode", "HTML");
+        } catch (JSONException e) {
+            throw new IOException("Error creating Telegram message: " + e.getMessage());
+        }
+
+        Request request = new Request.Builder()
+                .url(url)
+                .header("Content-Type", "application/json")
+                .post(RequestBody.create(body.toString(), MediaType.parse("application/json")))
+                .build();
+
+        try (Response response = client.newCall(request).execute()) {
+            if (response.code() == 200) {
+                String responseBody = response.body().string();
+                try {
+                    JSONObject json = new JSONObject(responseBody);
+                    JSONObject result = json.getJSONObject("result");
+                    return result.getString("message_id");
+                } catch (JSONException e) {
+                    return null;
+                }
+            }
+            return null;
+        }
+    }
+
+    // Edit existing Telegram message
+    private void editTelegramMessage(String botToken, String chatId, String messageId, String newText) throws IOException {
+        String url = "https://api.telegram.org/bot" + botToken + "/editMessageText";
+        
+        JSONObject body = new JSONObject();
+        try {
+            body.put("chat_id", chatId);
+            body.put("message_id", messageId);
+            body.put("text", newText);
+            body.put("parse_mode", "HTML");
+        } catch (JSONException e) {
+            throw new IOException("Error creating edit message request: " + e.getMessage());
+        }
+
+        Request request = new Request.Builder()
+                .url(url)
+                .header("Content-Type", "application/json")
+                .post(RequestBody.create(body.toString(), MediaType.parse("application/json")))
+                .build();
+
+        try (Response response = client.newCall(request).execute()) {
+            // We don't need to check response for edits
+        }
+    }
+
+    // ... (keep all the other existing methods the same: verifyRepoAccess, setupWorkflow, getFileSha, triggerWorkflow, generateWorkflowYaml, extractRepoInfo, testTelegramConnection, showProgressBar, showProgressDialog, updateStatus, showToast, onDestroy)
 
     private boolean verifyRepoAccess(String token) throws IOException {
         String url = "https://api.github.com/repos/" + currentRepoOwner + "/" + currentRepoName;
@@ -445,11 +591,10 @@ public class MainActivity extends AppCompatActivity {
 
         new Thread(() -> {
             try {
-                boolean success = sendTelegramMessage(botToken, userId, 
+                boolean success = sendTelegramMessage(currentBotToken, currentUserId, 
                     "🤖 APK Builder Pro - Connection Test\n\n" +
                     "✅ Your Telegram is properly configured!\n\n" +
-                    "When your Android build completes on GitHub Actions, the APK file will be sent to this chat automatically. 🚀\n\n" +
-                    "Build details and status updates will also appear here.");
+                    "When your Android build completes on GitHub Actions, the APK file will be sent to this chat automatically. 🚀") != null;
                 
                 runOnUiThread(() -> {
                     progressDialog.dismiss();
@@ -474,29 +619,6 @@ public class MainActivity extends AppCompatActivity {
                 });
             }
         }).start();
-    }
-
-    private boolean sendTelegramMessage(String botToken, String chatId, String message) throws IOException {
-        String url = "https://api.telegram.org/bot" + botToken + "/sendMessage";
-        
-        JSONObject body = new JSONObject();
-        try {
-            body.put("chat_id", chatId);
-            body.put("text", message);
-            body.put("parse_mode", "HTML");
-        } catch (JSONException e) {
-            throw new IOException("Error creating Telegram message: " + e.getMessage());
-        }
-
-        Request request = new Request.Builder()
-                .url(url)
-                .header("Content-Type", "application/json")
-                .post(RequestBody.create(body.toString(), MediaType.parse("application/json")))
-                .build();
-
-        try (Response response = client.newCall(request).execute()) {
-            return response.code() == 200;
-        }
     }
 
     private void showProgressBar(boolean show) {
