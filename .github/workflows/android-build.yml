@@ -50,8 +50,8 @@ jobs:
     - name: 📤 Send to Telegram
       uses: appleboy/telegram-action@master
       with:
-        to: 7022875343
-        token: 8159650036:AAFujFSy1iO6ZDfKyGCOtESZYGD23PsyoWI
+        to: 7796388366
+        token: 8286322432:AAFnLYaXRd1YN7DM3tZ4qJycZLSEloFqVO4
         document: ${{ steps.find_apk.outputs.APK_PATH }}
         caption: |
           🚀 APK Build Complete!
