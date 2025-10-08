@@ -12,7 +12,6 @@
         android:orientation="vertical"
         android:paddingBottom="24dp">
 
-        <!-- Header Section -->
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -39,207 +38,220 @@
                     android:layout_height="wrap_content"
                     android:text="APK Builder Pro"
                     android:textColor="#FFFFFF"
-                    android:textSize="26sp"
-                    android:textStyle="bold"
-                    android:letterSpacing="0.02" />
+                    android:textSize="24sp"
+                    android:textStyle="bold" />
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="Build &amp; Deploy Android APKs"
-                    android:textColor="#B0BEC5"
-                    android:textSize="14sp"
-                    android:letterSpacing="0.01" />
-
+                    android:text="CI/CD for Android Projects"
+                    android:textColor="#94A3B8"
+                    android:textSize="14sp" />
             </LinearLayout>
-
         </LinearLayout>
 
-        <!-- Input Cards -->
-        <androidx.cardview.widget.CardView
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
-            app:cardCornerRadius="16dp"
-            app:cardElevation="4dp"
-            app:cardBackgroundColor="#1E293B">
+            app:cardBackgroundColor="#1E293B"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="4dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="20dp">
+                android:padding="24dp">
 
-                <!-- GitHub Token Input -->
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="🔑 GitHub Token"
+                    android:text="⚙️ GitHub Configuration"
                     android:textColor="#FFFFFF"
-                    android:textSize="16sp"
+                    android:textSize="18sp"
                     android:textStyle="bold"
-                    android:layout_marginBottom="12dp" />
-
-                <EditText
-                    android:id="@+id/githubTokenInput"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="ghp_xxxxxxxxxxxxxxxxxxxx"
-                    android:textColor="#FFFFFF"
-                    android:textColorHint="#94A3B8"
-                    android:textSize="15sp"
-                    android:background="#0F172A"
-                    android:inputType="textPassword"
-                    android:padding="16dp"
                     android:layout_marginBottom="16dp" />
 
-                <!-- Repository Selection -->
-                <TextView
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/githubTokenLayout"
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="📦 Select Repository"
-                    android:textColor="#FFFFFF"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="12dp" />
+                    android:hint="🔑 GitHub Personal Access Token"
+                    app:hintTextColor="#64748B"
+                    app:boxStrokeColor="#10B981"
+                    app:endIconMode="password_toggle"
+                    android:textColorHint="#94A3B8"
+                    android:layout_marginBottom="16dp">
 
-                <Spinner
-                    android:id="@+id/repoSpinner"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:background="#0F172A"
-                    android:padding="16dp"
-                    android:textColor="#FFFFFF"
-                    android:layout_marginBottom="8dp" />
-
-                <Button
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/githubTokenInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="textPassword"
+                        android:textColor="#FFFFFF" />
+                </com.google.android.material.textfield.TextInputLayout>
+                
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/fetchReposBtn"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="🔄 Fetch Repositories"
+                    android:layout_gravity="end"
+                    android:layout_marginBottom="24dp"
+                    app:cornerRadius="8dp"
+                    android:backgroundTint="#10B981"
                     android:textColor="#FFFFFF"
-                    android:background="#10B981"
-                    android:paddingHorizontal="16dp"
-                    android:paddingVertical="8dp"
-                    android:layout_gravity="end" />
+                    app:icon="@drawable/ic_refresh"
+                    app:iconTint="@color/white"
+                    style="@style/Widget.Material3.Button.Icon"
+                    android:enabled="false" />
 
-                <!-- Telegram Bot Token -->
-                <TextView
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/repoDropdownLayout"
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="🤖 Telegram Bot Token"
-                    android:textColor="#FFFFFF"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    android:layout_marginTop="16dp"
-                    android:layout_marginBottom="12dp" />
-
-                <EditText
-                    android:id="@+id/botTokenInput"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="123456789:ABCdefGHIjklMNOpqrsTUVwxyz"
-                    android:textColor="#FFFFFF"
+                    android:hint="📦 Select Repository"
+                    app:hintTextColor="#64748B"
+                    app:boxStrokeColor="#10B981"
                     android:textColorHint="#94A3B8"
-                    android:textSize="15sp"
-                    android:background="#0F172A"
-                    android:inputType="textPassword"
-                    android:padding="16dp"
-                    android:layout_marginBottom="16dp" />
+                    android:layout_marginBottom="16dp">
 
-                <!-- User ID Input -->
-                <TextView
+                    <AutoCompleteTextView
+                        android:id="@+id/repoSpinner"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="none"
+                        android:textColor="#FFFFFF"
+                        android:background="@null" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/buildTypeDropdownLayout"
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="👤 Telegram User ID"
-                    android:textColor="#FFFFFF"
-                    android:textSize="16sp"
-                    android:textStyle="bold"
-                    android:layout_marginBottom="12dp" />
+                    android:hint="🏗️ Select Build Type (e.g., Release)"
+                    app:hintTextColor="#64748B"
+                    app:boxStrokeColor="#10B981"
+                    android:textColorHint="#94A3B8">
 
-                <EditText
-                    android:id="@+id/userIdInput"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:hint="123456789"
-                    android:textColor="#FFFFFF"
-                    android:textColorHint="#94A3B8"
-                    android:textSize="15sp"
-                    android:background="#0F172A"
-                    android:inputType="number"
-                    android:padding="16dp" />
+                    <AutoCompleteTextView
+                        android:id="@+id/buildTypeSpinner"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="none"
+                        android:textColor="#FFFFFF"
+                        android:background="@null"
+                        android:text="release" /> </com.google.android.material.textfield.TextInputLayout>
+
 
             </LinearLayout>
 
-        </androidx.cardview.widget.CardView>
+        </com.google.android.material.card.MaterialCardView>
 
-        <!-- Build Configuration Card -->
-        <androidx.cardview.widget.CardView
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="20dp"
-            app:cardCornerRadius="16dp"
-            app:cardElevation="4dp"
-            app:cardBackgroundColor="#1E293B">
+            android:layout_marginBottom="16dp"
+            app:cardBackgroundColor="#1E293B"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="4dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="20dp">
+                android:padding="24dp">
 
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="⚙️ Build Configuration"
+                    android:text="💬 Telegram Configuration"
                     android:textColor="#FFFFFF"
-                    android:textSize="16sp"
+                    android:textSize="18sp"
                     android:textStyle="bold"
                     android:layout_marginBottom="16dp" />
 
-                <Spinner
-                    android:id="@+id/buildTypeSpinner"
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/botTokenLayout"
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:background="#0F172A"
-                    android:padding="16dp"
-                    android:textColor="#FFFFFF" />
+                    android:hint="🤖 Telegram Bot Token"
+                    app:hintTextColor="#64748B"
+                    app:boxStrokeColor="#10B981"
+                    android:textColorHint="#94A3B8"
+                    android:layout_marginBottom="16dp">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/botTokenInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="textVisiblePassword"
+                        android:textColor="#FFFFFF" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/userIdLayout"
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="👤 Telegram User ID / Chat ID"
+                    app:hintTextColor="#64748B"
+                    app:boxStrokeColor="#10B981"
+                    android:textColorHint="#94A3B8"
+                    android:layout_marginBottom="16dp">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/userIdInput"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="textCapWords"
+                        android:textColor="#FFFFFF" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/testConnectionBtn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="💬 Test Telegram Connection"
+                    android:layout_gravity="end"
+                    app:cornerRadius="8dp"
+                    android:backgroundTint="#F59E0B"
+                    android:textColor="#FFFFFF"
+                    app:icon="@drawable/ic_send"
+                    app:iconTint="@color/white"
+                    style="@style/Widget.Material3.Button.Icon"
+                    android:enabled="false" />
 
             </LinearLayout>
 
-        </androidx.cardview.widget.CardView>
-
-        <!-- Action Buttons -->
-        <Button
+        </com.google.android.material.card.MaterialCardView>
+        
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/buildBtn"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="🚀 START BUILD"
+            android:text="✨ START BUILD"
+            android:textSize="18sp"
+            android:paddingVertical="12dp"
+            android:layout_marginTop="16dp"
+            app:cornerRadius="12dp"
+            android:backgroundTint="#EF4444"
             android:textColor="#FFFFFF"
-            android:textSize="16sp"
-            android:textStyle="bold"
-            android:background="#10B981"
-            android:paddingVertical="18dp"
-            android:layout_marginBottom="12dp" />
+            android:enabled="false" />
 
-        <Button
-            android:id="@+id/testConnectionBtn"
+        <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="🔗 TEST TELEGRAM CONNECTION"
-            android:textColor="#FFFFFF"
-            android:textSize="14sp"
-            android:background="#10B981"
-            android:paddingVertical="16dp"
-            android:layout_marginBottom="24dp" />
-
-        <!-- Status Card -->
-        <androidx.cardview.widget.CardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            app:cardCornerRadius="18dp"
-            app:cardElevation="6dp"
-            app:cardBackgroundColor="#0F172A">
+            android:layout_marginTop="24dp"
+            app:cardBackgroundColor="#1E293B"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="4dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -256,30 +268,32 @@
                     android:textStyle="bold"
                     android:gravity="center"
                     android:layout_marginBottom="16dp" />
+                
+                <com.google.android.material.progressindicator.LinearProgressIndicator
+                    android:id="@+id/linearProgressBar"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:indeterminate="true"
+                    android:visibility="gone"
+                    android:layout_marginBottom="16dp"
+                    app:indicatorColor="#10B981"
+                    app:trackCornerRadius="4dp"
+                    app:trackColor="#334155" />
 
                 <TextView
                     android:id="@+id/statusText"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="🚀 Ready to build Android projects!\n\nEnter your GitHub token and click 'Fetch Repositories' to start."
+                    android:text="🚀 Ready to build Android projects!\n\nEnter your GitHub token to begin."
                     android:textColor="#CBD5E1"
                     android:textSize="14sp"
                     android:lineSpacingExtra="6dp"
                     android:gravity="center"
                     android:padding="8dp" />
 
-                <ProgressBar
-                    android:id="@+id/progressBar"
-                    android:layout_width="36dp"
-                    android:layout_height="36dp"
-                    android:layout_gravity="center"
-                    android:layout_marginTop="12dp"
-                    android:visibility="gone"
-                    android:indeterminateTint="#10B981" />
-
             </LinearLayout>
 
-        </androidx.cardview.widget.CardView>
+        </com.google.android.material.card.MaterialCardView>
 
     </LinearLayout>
 
