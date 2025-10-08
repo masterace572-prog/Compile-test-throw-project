@@ -1,789 +1,482 @@
 package com.apkbuilder.pro;
 
-import android.app.ProgressDialog;
+import android.content.Context;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.util.Log;
 import android.view.View;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.*;
 import androidx.appcompat.app.AppCompatActivity;
-import okhttp3.*;
-import org.json.JSONArray;
-import org.json.JSONObject;
-import org.json.JSONException;
+import com.apkbuilder.pro.models.BuildRequest;
+import com.apkbuilder.pro.models.BuildStage;
+import com.apkbuilder.pro.models.WorkflowResponse;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.progressindicator.LinearProgressIndicator;
+import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.TextInputLayout;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Pattern;
 import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class MainActivity extends AppCompatActivity {
 
-    private EditText githubTokenInput, botTokenInput, userIdInput;
-    private Spinner repoSpinner, buildTypeSpinner;
-    private Button buildBtn, testConnectionBtn, fetchReposBtn;
+    private static final String TAG = "APKBuilderPro";
+
+    // UI Components (Updated to Material Design)
+    private TextInputEditText githubTokenInput, botTokenInput, userIdInput;
+    private AutoCompleteTextView repoSpinner, buildTypeSpinner;
+    private MaterialButton buildBtn, testConnectionBtn, fetchReposBtn;
     private TextView statusText;
-    private ProgressBar progressBar;
-    private ProgressDialog progressDialog;
-    private OkHttpClient client;
+    private LinearProgressIndicator linearProgressBar;
     
-    private String currentRepoOwner = "";
-    private String currentRepoName = "";
-    private String currentBuildType = "";
-    private String currentBotToken = "";
-    private String currentUserId = "";
+    // Services and Data
+    private GitHubService gitHubService;
+    private TelegramService telegramService = new TelegramService();
+    private BuildRequest buildRequest = new BuildRequest();
+    
+    // Concurrency and State
     private ScheduledExecutorService statusScheduler;
     private Handler mainHandler;
-    private boolean isBuildRunning = false;
+    private BuildStage currentStage = BuildStage.IDLE;
     private String lastWorkflowRunId = "";
-    private int currentStage = 0;
-    private long buildStartTime = 0;
-    private String lastMessageId = "";
+    private List<String> availableRepos = new ArrayList<>();
     
-    private List<GitHubRepo> repoList = new ArrayList<>();
+    // Standard Android Build Types
+    private final List<String> buildTypes = Arrays.asList("release", "debug", "staging");
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         
-        initializeViews();
-        client = new OkHttpClient();
         mainHandler = new Handler(Looper.getMainLooper());
+
+        // 1. Initialize UI components
+        initializeUI();
+
+        // 2. Setup Listeners
+        setupListeners();
+        
+        // 3. Setup Dropdowns
+        setupDropdowns();
+        
+        updateStage(BuildStage.IDLE, "Welcome! Enter your GitHub token and press 'Fetch Repositories'.");
     }
 
-    private void initializeViews() {
+    private void initializeUI() {
+        // Material Input Layouts
         githubTokenInput = findViewById(R.id.githubTokenInput);
         botTokenInput = findViewById(R.id.botTokenInput);
         userIdInput = findViewById(R.id.userIdInput);
+
+        // AutoCompleteTextViews (as Exposed Dropdown Menus)
         repoSpinner = findViewById(R.id.repoSpinner);
         buildTypeSpinner = findViewById(R.id.buildTypeSpinner);
+
+        // Material Buttons
         buildBtn = findViewById(R.id.buildBtn);
         testConnectionBtn = findViewById(R.id.testConnectionBtn);
         fetchReposBtn = findViewById(R.id.fetchReposBtn);
+
+        // Status
         statusText = findViewById(R.id.statusText);
-        progressBar = findViewById(R.id.progressBar);
-
-        // Setup build type spinner
-        ArrayAdapter<CharSequence> buildAdapter = ArrayAdapter.createFromResource(this,
-                R.array.build_types, android.R.layout.simple_spinner_item);
-        buildAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        buildTypeSpinner.setAdapter(buildAdapter);
-
-        // Setup repo spinner with empty adapter initially
-        ArrayAdapter<String> repoAdapter = new ArrayAdapter<>(this, 
-                android.R.layout.simple_spinner_item, new ArrayList<String>());
-        repoAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        repoSpinner.setAdapter(repoAdapter);
-
-        buildBtn.setOnClickListener(v -> startBuildProcess());
-        testConnectionBtn.setOnClickListener(v -> testTelegramConnection());
-        fetchReposBtn.setOnClickListener(v -> fetchRepositories());
-
-        statusText.setText("🚀 Ready to build Android projects!\n\nEnter your GitHub token and click 'Fetch Repositories' to start.");
-        
-        // Disable build button until repo is selected
-        buildBtn.setEnabled(false);
+        linearProgressBar = findViewById(R.id.linearProgressBar);
     }
-
-    private void fetchRepositories() {
-        String githubToken = githubTokenInput.getText().toString().trim();
-        
-        if (githubToken.isEmpty()) {
-            showToast("Please enter GitHub token first");
-            return;
-        }
-
-        showProgressDialog("Fetching your repositories...");
-        
-        new Thread(() -> {
-            try {
-                List<GitHubRepo> repos = getGitHubRepositories(githubToken);
-                repoList = repos;
-                
-                runOnUiThread(() -> {
-                    progressDialog.dismiss();
-                    
-                    if (repos.isEmpty()) {
-                        updateStatus("❌ No repositories found\n\n" +
-                                   "Make sure:\n• GitHub token has repo scope\n• You have accessible repositories\n• Token is valid");
-                        showToast("No repositories found");
-                        return;
-                    }
-                    
-                    // Update spinner with repository names
-                    List<String> repoNames = new ArrayList<>();
-                    for (GitHubRepo repo : repos) {
-                        repoNames.add(repo.getFullName());
-                    }
-                    
-                    ArrayAdapter<String> adapter = new ArrayAdapter<>(MainActivity.this,
-                            android.R.layout.simple_spinner_item, repoNames);
-                    adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-                    repoSpinner.setAdapter(adapter);
-                    
-                    // Enable build button
-                    buildBtn.setEnabled(true);
-                    
-                    updateStatus("✅ Found " + repos.size() + " repositories!\n\n" +
-                               "Select a repository from the dropdown and click 'START BUILD'");
-                    showToast("Found " + repos.size() + " repositories!");
-                });
-                
-            } catch (Exception e) {
-                runOnUiThread(() -> {
-                    progressDialog.dismiss();
-                    updateStatus("❌ Failed to fetch repositories\n\nError: " + e.getMessage() + 
-                               "\n\nCheck:\n• GitHub token permissions\n• Internet connection\n• Token validity");
-                    showToast("Failed to fetch repositories");
-                });
-            }
-        }).start();
+    
+    private void setupDropdowns() {
+        // Build Type Dropdown
+        ArrayAdapter<String> buildTypeAdapter = new ArrayAdapter<>(
+            this, 
+            com.google.android.material.R.layout.support_simple_spinner_dropdown_item, // Standard Material Dropdown Item
+            buildTypes
+        );
+        buildTypeSpinner.setAdapter(buildTypeAdapter);
+        buildTypeSpinner.setText(buildTypes.get(0), false); // Set default to 'release'
+        buildRequest.setBuildType(buildTypes.get(0));
     }
-
-    private List<GitHubRepo> getGitHubRepositories(String token) throws IOException {
-        List<GitHubRepo> repos = new ArrayList<>();
-        String url = "https://api.github.com/user/repos?per_page=100&sort=updated";
-        
-        Request request = new Request.Builder()
-                .url(url)
-                .header("Authorization", "token " + token)
-                .header("Accept", "application/vnd.github.v3+json")
-                .build();
-
-        try (Response response = client.newCall(request).execute()) {
-            if (response.code() == 200) {
-                String body = response.body().string();
-                JSONArray jsonArray = new JSONArray(body);
-                
-                for (int i = 0; i < jsonArray.length(); i++) {
-                    JSONObject repoJson = jsonArray.getJSONObject(i);
-                    String name = repoJson.getString("name");
-                    String fullName = repoJson.getString("full_name");
-                    String owner = repoJson.getJSONObject("owner").getString("login");
-                    boolean isPrivate = repoJson.getBoolean("private");
-                    String defaultBranch = repoJson.getString("default_branch");
-                    
-                    // Only include repos that likely have Android projects
-                    if (isLikelyAndroidRepo(repoJson)) {
-                        repos.add(new GitHubRepo(name, fullName, owner, isPrivate, defaultBranch));
-                    }
-                }
-            } else {
-                throw new IOException("Failed to fetch repositories: " + response.code());
-            }
-        } catch (JSONException e) {
-            throw new IOException("Error parsing repository data: " + e.getMessage());
-        }
-        
-        return repos;
-    }
-
-    private boolean isLikelyAndroidRepo(JSONObject repoJson) throws JSONException {
-        // Check if repo has common Android files
-        String name = repoJson.getString("name").toLowerCase();
-        
-        // Include all repos for now, but we could filter for Android-specific ones
-        // Common Android repo patterns
-        return true; // Include all repos for maximum flexibility
-    }
-
-    private void startBuildProcess() {
-        if (repoList.isEmpty() || repoSpinner.getSelectedItemPosition() < 0) {
-            showToast("Please fetch and select a repository first");
-            return;
-        }
-
-        final String githubToken = githubTokenInput.getText().toString().trim();
-        final String botToken = botTokenInput.getText().toString().trim();
-        final String userId = userIdInput.getText().toString().trim();
-        final String buildType = buildTypeSpinner.getSelectedItem().toString().toLowerCase();
-
-        if (githubToken.isEmpty() || botToken.isEmpty() || userId.isEmpty()) {
-            showToast("Please fill all required fields");
-            return;
-        }
-
-        // Get selected repository
-        GitHubRepo selectedRepo = repoList.get(repoSpinner.getSelectedItemPosition());
-        currentRepoOwner = selectedRepo.getOwner();
-        currentRepoName = selectedRepo.getName();
-        currentBuildType = buildType;
-        currentBotToken = botToken;
-        currentUserId = userId;
-        currentStage = 0;
-        buildStartTime = System.currentTimeMillis();
-        lastMessageId = "";
-
-        showProgressDialog("Setting up build environment...");
-        showProgressBar(true);
-        isBuildRunning = true;
-
-        new Thread(() -> {
-            try {
-                // Step 1: Verify repository access
-                updateStatusAndTelegram("🔍 Checking repository access...", true);
-                Thread.sleep(2000);
-                
-                if (!verifyRepoAccess(githubToken)) {
-                    throw new Exception("Cannot access repository. Check token permissions.");
-                }
-
-                // Step 2: Create or update workflow file
-                updateStatusAndTelegram("📝 Configuring workflow file...", true);
-                Thread.sleep(2000);
-                
-                if (!setupWorkflow(githubToken, botToken, userId, buildType)) {
-                    throw new Exception("Failed to setup workflow file");
-                }
-
-                // Step 3: Trigger workflow
-                updateStatusAndTelegram("🚀 Triggering build workflow...", true);
-                Thread.sleep(2000);
-                
-                String runId = triggerWorkflow(githubToken);
-                if (runId == null) {
-                    throw new Exception("Failed to trigger workflow");
-                }
-
-                lastWorkflowRunId = runId;
-                
-                runOnUiThread(() -> {
-                    progressDialog.dismiss();
-                    updateStatus("✅ BUILD STARTED SUCCESSFULLY! 🎉\n\n" +
-                            "📦 Repository: " + currentRepoOwner + "/" + currentRepoName + "\n" +
-                            "🔨 Build Type: " + buildType + "\n" +
-                            "🏗️ Status: Initializing build environment...\n" +
-                            "⏰ Estimated Time: 5-10 minutes\n\n" +
-                            "📱 APK will be sent to your Telegram automatically\n\n" +
-                            "Real-time status updates will appear here and in Telegram.");
-                    showToast("Build started successfully! 🚀");
-                });
-
-                // Send initial Telegram message
-                sendInitialTelegramMessage();
-
-                // Start real-time status simulation
-                startRealTimeStatusUpdates();
-
-            } catch (Exception e) {
-                runOnUiThread(() -> {
-                    progressDialog.dismiss();
-                    showProgressBar(false);
-                    isBuildRunning = false;
-                    updateStatus("❌ Build Failed\n\nError: " + e.getMessage() + 
-                                "\n\nPlease check:\n• GitHub token permissions\n• Repository exists and is accessible\n• All fields are filled correctly");
-                    showToast("Build failed: " + e.getMessage());
-                });
-            }
-        }).start();
-    }
-
-    // GitHub Repo data class
-    private static class GitHubRepo {
-        private String name;
-        private String fullName;
-        private String owner;
-        private boolean isPrivate;
-        private String defaultBranch;
-
-        public GitHubRepo(String name, String fullName, String owner, boolean isPrivate, String defaultBranch) {
-            this.name = name;
-            this.fullName = fullName;
-            this.owner = owner;
-            this.isPrivate = isPrivate;
-            this.defaultBranch = defaultBranch;
-        }
-
-        public String getName() { return name; }
-        public String getFullName() { return fullName; }
-        public String getOwner() { return owner; }
-        public boolean isPrivate() { return isPrivate; }
-        public String getDefaultBranch() { return defaultBranch; }
-    }
-
-    // ... (Keep all the existing methods from the previous version: sendInitialTelegramMessage, updateTelegramMessage, createTelegramMessage, startRealTimeStatusUpdates, getBuildStageStatus, getTelegramStatus, getTelegramDetails, getElapsedTime, updateStatusAndTelegram, sendTelegramMessage, editTelegramMessage, verifyRepoAccess, setupWorkflow, getFileSha, triggerWorkflow, generateWorkflowYaml, testTelegramConnection, showProgressBar, showProgressDialog, updateStatus, showToast, onDestroy)
-
-    private void sendInitialTelegramMessage() {
-        new Thread(() -> {
-            try {
-                String message = createTelegramMessage("🚀 Build Started", 
-                    "🏗️ Initializing build environment...\n⏰ Elapsed: " + getElapsedTime());
-                
-                // Send initial message and store the message ID
-                String messageId = sendTelegramMessage(currentBotToken, currentUserId, message);
-                if (messageId != null) {
-                    lastMessageId = messageId;
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }).start();
-    }
-
-    private void updateTelegramMessage(String status, String details) {
-        new Thread(() -> {
-            try {
-                String message = createTelegramMessage(status, details);
-                
-                if (!lastMessageId.isEmpty()) {
-                    // Edit the existing message
-                    editTelegramMessage(currentBotToken, currentUserId, lastMessageId, message);
-                } else {
-                    // If no message ID stored, send a new one
-                    String messageId = sendTelegramMessage(currentBotToken, currentUserId, message);
-                    if (messageId != null) {
-                        lastMessageId = messageId;
-                    }
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }).start();
-    }
-
-    private String createTelegramMessage(String status, String details) {
-        return "🤖 APK Builder Pro - Build Status\n\n" +
-               "📊 " + status + "\n\n" +
-               details + "\n\n" +
-               "📦 Repository: " + currentRepoOwner + "/" + currentRepoName + "\n" +
-               "🔨 Build Type: " + currentBuildType + "\n" +
-               "⏰ Elapsed: " + getElapsedTime();
-    }
-
-    private void startRealTimeStatusUpdates() {
-        if (statusScheduler != null && !statusScheduler.isShutdown()) {
-            statusScheduler.shutdown();
-        }
-
-        statusScheduler = Executors.newSingleThreadScheduledExecutor();
-        statusScheduler.scheduleAtFixedRate(() -> {
-            if (!isBuildRunning) {
-                statusScheduler.shutdown();
-                return;
-            }
-
-            currentStage++;
-            String status = getBuildStageStatus(currentStage);
+    
+    private void setupListeners() {
+        // Text Watchers to enable/disable buttons
+        TextWatcher tokenWatcher = new SimpleTextWatcher(() -> {
+            boolean hasGithubToken = !githubTokenInput.getText().toString().trim().isEmpty();
+            boolean hasTelegramDetails = !botTokenInput.getText().toString().trim().isEmpty() && 
+                                         !userIdInput.getText().toString().trim().isEmpty();
             
-            // Update app status
-            updateStatus(status);
+            fetchReposBtn.setEnabled(hasGithubToken);
+            testConnectionBtn.setEnabled(hasTelegramDetails);
             
-            // Update Telegram message
-            String telegramStatus = getTelegramStatus(currentStage);
-            String telegramDetails = getTelegramDetails(currentStage);
-            updateTelegramMessage(telegramStatus, telegramDetails);
+            // Re-check main build button status
+            checkBuildButtonState(); 
+        });
 
-            // Simulate build completion after 8 stages
-            if (currentStage >= 8) {
-                isBuildRunning = false;
-                statusScheduler.shutdown();
-                
-                // Final completion message
-                updateStatus("✅ BUILD COMPLETED SUCCESSFULLY! 🎉\n\n" +
-                        "📦 APK has been built and sent to your Telegram!\n" +
-                        "📱 Check your Telegram messages for the APK file.\n" +
-                        "⏰ Total time: " + getElapsedTime() + "\n\n" +
-                        "🎯 Your APK is ready to install!");
-                
-                updateTelegramMessage("✅ Build Completed Successfully", 
-                    "📦 APK has been built and sent!\n" +
-                    "📱 Check your messages for the APK file.\n" +
-                    "🎯 Your APK is ready to install!");
-                
-                runOnUiThread(() -> {
-                    showProgressBar(false);
-                    showToast("Build completed successfully! 🎉");
-                });
-            }
-        }, 0, 30, TimeUnit.SECONDS); // Update every 30 seconds
-    }
+        githubTokenInput.addTextChangedListener(tokenWatcher);
+        botTokenInput.addTextChangedListener(tokenWatcher);
+        userIdInput.addTextChangedListener(tokenWatcher);
 
-    private String getBuildStageStatus(int stage) {
-        switch (stage) {
-            case 1:
-                return "🏗️ Initializing build environment...\nSetting up Android SDK and tools\n⏰ Elapsed: " + getElapsedTime();
-            case 2:
-                return "📥 Downloading Android SDK components...\nInstalling build tools and platforms\n⏰ Elapsed: " + getElapsedTime();
-            case 3:
-                return "✅ Accepting Android licenses...\nConfiguring build environment\n⏰ Elapsed: " + getElapsedTime();
-            case 4:
-                return "⚙️ Setting up JDK and Gradle...\nPreparing build system\n⏰ Elapsed: " + getElapsedTime();
-            case 5:
-                return "🔧 Configuring project...\nSyncing Gradle dependencies\n⏰ Elapsed: " + getElapsedTime();
-            case 6:
-                return "🏗️ Building APK...\nCompiling code and resources\n⏰ Elapsed: " + getElapsedTime();
-            case 7:
-                return "📦 Packaging application...\nCreating signed APK file\n⏰ Elapsed: " + getElapsedTime();
-            case 8:
-                return "🚀 Finalizing build...\nAlmost complete!\n⏰ Elapsed: " + getElapsedTime();
-            default:
-                return "🔄 Build in progress...\nWorking on your APK\n⏰ Elapsed: " + getElapsedTime();
-        }
-    }
-
-    private String getTelegramStatus(int stage) {
-        switch (stage) {
-            case 1: return "🏗️ Initializing Environment";
-            case 2: return "📥 Downloading SDK";
-            case 3: return "✅ Accepting Licenses";
-            case 4: return "⚙️ Setting Up Build System";
-            case 5: return "🔧 Configuring Project";
-            case 6: return "🏗️ Building APK";
-            case 7: return "📦 Packaging Application";
-            case 8: return "🚀 Finalizing Build";
-            default: return "🔄 Build In Progress";
-        }
-    }
-
-    private String getTelegramDetails(int stage) {
-        switch (stage) {
-            case 1: return "Setting up Android SDK and build tools...";
-            case 2: return "Downloading Android components and platforms...";
-            case 3: return "Configuring Android development environment...";
-            case 4: return "Preparing JDK and Gradle for compilation...";
-            case 5: return "Syncing project dependencies and configuration...";
-            case 6: return "Compiling source code and resources...";
-            case 7: return "Creating signed APK package...";
-            case 8: return "Finalizing build and preparing APK delivery...";
-            default: return "Build process is running...";
-        }
-    }
-
-    private String getElapsedTime() {
-        long elapsed = System.currentTimeMillis() - buildStartTime;
-        long minutes = TimeUnit.MILLISECONDS.toMinutes(elapsed);
-        return minutes + " minutes";
-    }
-
-    private void updateStatusAndTelegram(String message, boolean isInitial) {
-        mainHandler.post(() -> {
-            updateStatus(message);
+        // Dropdown selection listeners
+        repoSpinner.setOnItemClickListener((parent, view, position, id) -> {
+            String selectedRepo = (String) parent.getItemAtPosition(position);
+            parseRepoUrl(selectedRepo);
+            checkBuildButtonState();
         });
         
-        if (isInitial) {
-            // For initial setup steps, update Telegram
-            String status = "🔧 Build Setup";
-            String details = message;
-            updateTelegramMessage(status, details);
+        buildTypeSpinner.setOnItemClickListener((parent, view, position, id) -> {
+            String selectedType = (String) parent.getItemAtPosition(position);
+            buildRequest.setBuildType(selectedType);
+            checkBuildButtonState();
+        });
+
+        // Button Click Listeners
+        fetchReposBtn.setOnClickListener(v -> fetchRepositories());
+        testConnectionBtn.setOnClickListener(v -> testTelegramConnection());
+        buildBtn.setOnClickListener(v -> startBuildProcess());
+    }
+    
+    /**
+     * Helper to enable the main build button only when all required fields are set.
+     */
+    private void checkBuildButtonState() {
+        boolean isRepoSelected = buildRequest.getRepoName() != null && !buildRequest.getRepoName().isEmpty();
+        boolean hasGithubToken = !githubTokenInput.getText().toString().trim().isEmpty();
+        boolean isBuildTypeSelected = buildRequest.getBuildType() != null && !buildRequest.getBuildType().isEmpty();
+        
+        buildBtn.setEnabled(isRepoSelected && hasGithubToken && isBuildTypeSelected && currentStage == BuildStage.IDLE);
+    }
+
+    /**
+     * Parses the selected repository string (owner/repo) into the BuildRequest object.
+     */
+    private void parseRepoUrl(String fullRepoName) {
+        if (fullRepoName != null && fullRepoName.contains("/")) {
+            String[] parts = fullRepoName.split("/");
+            buildRequest.setRepoOwner(parts[0]);
+            buildRequest.setRepoName(parts[1]);
+            buildRequest.setRepoUrl("https://github.com/" + fullRepoName);
+        } else {
+            buildRequest.setRepoOwner(null);
+            buildRequest.setRepoName(null);
+            buildRequest.setRepoUrl(null);
         }
     }
 
-    // Send Telegram message and return message ID
-    private String sendTelegramMessage(String botToken, String chatId, String message) throws IOException {
-        String url = "https://api.telegram.org/bot" + botToken + "/sendMessage";
+    /**
+     * Updates the UI to reflect the current BuildStage.
+     */
+    private void updateStage(BuildStage newStage, String customMessage) {
+        this.currentStage = newStage;
+        showProgressBar(newStage.getStageId() > 0 && newStage.getStageId() < BuildStage.COMPLETED.getStageId());
         
-        JSONObject body = new JSONObject();
-        try {
-            body.put("chat_id", chatId);
-            body.put("text", message);
-            body.put("parse_mode", "HTML");
-        } catch (JSONException e) {
-            throw new IOException("Error creating Telegram message: " + e.getMessage());
+        String message = (customMessage != null) ? customMessage : newStage.getMessage();
+        statusText.setText(message);
+        
+        Log.d(TAG, "Stage updated: " + newStage.name() + " - " + message);
+        checkBuildButtonState(); // Re-check button state on stage change
+    }
+    
+    // =========================================================================
+    // API & Build Logic
+    // =========================================================================
+
+    private void fetchRepositories() {
+        closeKeyboard();
+        String token = githubTokenInput.getText().toString().trim();
+        if (token.isEmpty()) {
+            updateStage(BuildStage.IDLE, "Please enter a GitHub token first.");
+            return;
         }
 
-        Request request = new Request.Builder()
-                .url(url)
-                .header("Content-Type", "application/json")
-                .post(RequestBody.create(body.toString(), MediaType.parse("application/json")))
-                .build();
+        updateStage(BuildStage.FETCHING_REPOS, BuildStage.FETCHING_REPOS.getMessage());
+        buildRequest.setGithubToken(token);
+        
+        // Initialize GitHub service with the token
+        gitHubService = new GitHubService(token);
 
-        try (Response response = client.newCall(request).execute()) {
-            if (response.code() == 200) {
-                String responseBody = response.body().string();
-                try {
-                    JSONObject json = new JSONObject(responseBody);
-                    JSONObject result = json.getJSONObject("result");
-                    return result.getString("message_id");
-                } catch (JSONException e) {
-                    return null;
-                }
+        // Using a new Thread is a simple way to offload network, but ExecutorService is better
+        new Thread(() -> {
+            try {
+                List<String> repos = gitHubService.getRepositories();
+                availableRepos = repos;
+                
+                mainHandler.post(() -> {
+                    // Update Repo Dropdown
+                    ArrayAdapter<String> repoAdapter = new ArrayAdapter<>(
+                        MainActivity.this, 
+                        com.google.android.material.R.layout.support_simple_spinner_dropdown_item, 
+                        availableRepos
+                    );
+                    repoSpinner.setAdapter(repoAdapter);
+
+                    if (repos.isEmpty()) {
+                        updateStage(BuildStage.IDLE, "❌ No repositories found. Check your token scope or try again.");
+                    } else {
+                        updateStage(BuildStage.IDLE, "✅ Repositories fetched successfully. Now select one and configure Telegram.");
+                    }
+                });
+            } catch (IOException e) {
+                Log.e(TAG, "Error fetching repos", e);
+                mainHandler.post(() -> {
+                    updateStage(BuildStage.IDLE, "❌ Failed to fetch repositories: " + e.getMessage());
+                });
             }
-            return null;
-        }
+        }).start();
     }
-
-    // Edit existing Telegram message
-    private void editTelegramMessage(String botToken, String chatId, String messageId, String newText) throws IOException {
-        String url = "https://api.telegram.org/bot" + botToken + "/editMessageText";
-        
-        JSONObject body = new JSONObject();
-        try {
-            body.put("chat_id", chatId);
-            body.put("message_id", messageId);
-            body.put("text", newText);
-            body.put("parse_mode", "HTML");
-        } catch (JSONException e) {
-            throw new IOException("Error creating edit message request: " + e.getMessage());
-        }
-
-        Request request = new Request.Builder()
-                .url(url)
-                .header("Content-Type", "application/json")
-                .post(RequestBody.create(body.toString(), MediaType.parse("application/json")))
-                .build();
-
-        try (Response response = client.newCall(request).execute()) {
-            // We don't need to check response for edits
-        }
-    }
-
-    private boolean verifyRepoAccess(String token) throws IOException {
-        String url = "https://api.github.com/repos/" + currentRepoOwner + "/" + currentRepoName;
-        Request request = new Request.Builder()
-                .url(url)
-                .header("Authorization", "token " + token)
-                .header("Accept", "application/vnd.github.v3+json")
-                .build();
-
-        try (Response response = client.newCall(request).execute()) {
-            return response.code() == 200;
-        }
-    }
-
-    private boolean setupWorkflow(String githubToken, String botToken, String userId, String buildType) throws IOException {
-        String workflowContent = generateWorkflowYaml(botToken, userId, buildType);
-        String encodedContent = android.util.Base64.encodeToString(workflowContent.getBytes(), android.util.Base64.NO_WRAP);
-        
-        String url = "https://api.github.com/repos/" + currentRepoOwner + "/" + currentRepoName + "/contents/.github/workflows/android-build.yml";
-        
-        String sha = getFileSha(githubToken, url);
-        
-        JSONObject requestBody = new JSONObject();
-        try {
-            requestBody.put("message", "Configure Android CI/CD workflow via APK Builder Pro");
-            requestBody.put("content", encodedContent);
-            requestBody.put("branch", "main");
-            if (sha != null) {
-                requestBody.put("sha", sha);
-            }
-        } catch (JSONException e) {
-            throw new IOException("Error creating workflow request: " + e.getMessage());
-        }
-
-        Request request = new Request.Builder()
-                .url(url)
-                .header("Authorization", "token " + githubToken)
-                .header("Accept", "application/vnd.github.v3+json")
-                .header("Content-Type", "application/json")
-                .put(RequestBody.create(requestBody.toString(), MediaType.parse("application/json")))
-                .build();
-
-        try (Response response = client.newCall(request).execute()) {
-            return response.code() == 201 || response.code() == 200;
-        }
-    }
-
-    private String getFileSha(String token, String url) throws IOException {
-        Request request = new Request.Builder()
-                .url(url)
-                .header("Authorization", "token " + token)
-                .header("Accept", "application/vnd.github.v3+json")
-                .build();
-
-        try (Response response = client.newCall(request).execute()) {
-            if (response.code() == 200) {
-                String body = response.body().string();
-                try {
-                    JSONObject json = new JSONObject(body);
-                    return json.getString("sha");
-                } catch (JSONException e) {
-                    return null;
-                }
-            }
-        } catch (Exception e) {
-            // File doesn't exist
-        }
-        return null;
-    }
-
-    private String triggerWorkflow(String githubToken) throws IOException {
-        String url = "https://api.github.com/repos/" + currentRepoOwner + "/" + currentRepoName + "/actions/workflows/android-build.yml/dispatches";
-        
-        JSONObject requestBody = new JSONObject();
-        try {
-            requestBody.put("ref", "main");
-        } catch (JSONException e) {
-            throw new IOException("Error creating trigger request: " + e.getMessage());
-        }
-
-        Request request = new Request.Builder()
-                .url(url)
-                .header("Authorization", "token " + githubToken)
-                .header("Accept", "application/vnd.github.v3+json")
-                .header("Content-Type", "application/json")
-                .post(RequestBody.create(requestBody.toString(), MediaType.parse("application/json")))
-                .build();
-
-        try (Response response = client.newCall(request).execute()) {
-            if (response.code() == 204) {
-                return "simulated-run-id-" + System.currentTimeMillis();
-            }
-            return null;
-        }
-    }
-
-    private String generateWorkflowYaml(String botToken, String userId, String buildType) {
-        String buildCommand = "debug".equals(buildType) ? "assembleDebug" : 
-                             "release".equals(buildType) ? "assembleRelease" : 
-                             "assemble";
-
-        return "name: Android CI with APK Builder Pro\n" +
-                "\n" +
-                "on:\n" +
-                "  workflow_dispatch:\n" +
-                "  push:\n" +
-                "    branches: [ main, master ]\n" +
-                "\n" +
-                "jobs:\n" +
-                "  build:\n" +
-                "    runs-on: ubuntu-latest\n" +
-                "\n" +
-                "    steps:\n" +
-                "    - name: 🚀 Checkout code\n" +
-                "      uses: actions/checkout@v4\n" +
-                "\n" +
-                "    - name: ⚙️ Set up JDK 17\n" +
-                "      uses: actions/setup-java@v4\n" +
-                "      with:\n" +
-                "        java-version: '17'\n" +
-                "        distribution: 'temurin'\n" +
-                "\n" +
-                "    - name: 🤖 Setup Android SDK\n" +
-                "      uses: android-actions/setup-android@v3\n" +
-                "\n" +
-                "    - name: ✅ Accept Android Licenses\n" +
-                "      run: |\n" +
-                "        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses\n" +
-                "\n" +
-                "    - name: 📥 Install Android Components\n" +
-                "      run: |\n" +
-                "        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \"platforms;android-34\" \"build-tools;34.0.0\" \"platform-tools\"\n" +
-                "        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \"ndk;25.1.8937393\" \"cmake;3.22.1\"\n" +
-                "\n" +
-                "    - name: 🏗️ Build APK\n" +
-                "      run: |\n" +
-                "        chmod +x gradlew\n" +
-                "        ./gradlew clean\n" +
-                "        ./gradlew " + buildCommand + "\n" +
-                "\n" +
-                "    - name: 🔍 Find APK\n" +
-                "      id: find_apk\n" +
-                "      run: |\n" +
-                "        APK_PATH=$(find . -name \"*.apk\" | grep -v \"unsigned\" | head -1)\n" +
-                "        if [ -z \"$APK_PATH\" ]; then\n" +
-                "          APK_PATH=$(find . -name \"*" + buildType + "*.apk\" | head -1)\n" +
-                "        fi\n" +
-                "        echo \"APK_PATH=$APK_PATH\" >> $GITHUB_OUTPUT\n" +
-                "        echo \"📱 Found APK: $APK_PATH\"\n" +
-                "\n" +
-                "    - name: 📤 Send to Telegram\n" +
-                "      uses: appleboy/telegram-action@master\n" +
-                "      with:\n" +
-                "        to: " + userId + "\n" +
-                "        token: " + botToken + "\n" +
-                "        document: ${{ steps.find_apk.outputs.APK_PATH }}\n" +
-                "        caption: |\n" +
-                "          🚀 APK Build Complete!\n" +
-                "          \n" +
-                "          📦 Project: ${{ github.repository }}\n" +
-                "          📱 Build Type: " + buildType + "\n" +
-                "          🔨 Built via APK Builder Pro App\n" +
-                "          ✅ Ready to install!\n" +
-                "\n" +
-                "    - name: 📊 Build Report\n" +
-                "      if: always()\n" +
-                "      run: |\n" +
-                "        echo \"=== BUILD COMPLETE ===\"\n" +
-                "        echo \"Repository: ${{ github.repository }}\"\n" +
-                "        echo \"Build Type: " + buildType + "\"\n" +
-                "        echo \"APK Path: ${{ steps.find_apk.outputs.APK_PATH }}\"\n" +
-                "        echo \"Status: ${{ job.status }}\"";
-    }
-
+    
     private void testTelegramConnection() {
+        closeKeyboard();
         String botToken = botTokenInput.getText().toString().trim();
         String userId = userIdInput.getText().toString().trim();
 
         if (botToken.isEmpty() || userId.isEmpty()) {
-            showToast("Please enter bot token and user ID");
+            Toast.makeText(this, "Please enter both Telegram Bot Token and User ID.", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        showProgressDialog("Testing Telegram connection...");
-        showProgressBar(true);
+        updateStage(BuildStage.TESTING_TELEGRAM, BuildStage.TESTING_TELEGRAM.getMessage());
+        buildRequest.setBotToken(botToken);
+        buildRequest.setUserId(userId);
 
         new Thread(() -> {
             try {
-                boolean success = sendTelegramMessage(currentBotToken, currentUserId, 
-                    "🤖 APK Builder Pro - Connection Test\n\n" +
-                    "✅ Your Telegram is properly configured!\n\n" +
-                    "When your Android build completes on GitHub Actions, the APK file will be sent to this chat automatically. 🚀") != null;
+                boolean success = telegramService.testConnection(botToken, userId);
                 
-                runOnUiThread(() -> {
-                    progressDialog.dismiss();
-                    showProgressBar(false);
+                mainHandler.post(() -> {
                     if (success) {
-                        updateStatus("✅ Telegram Connection Successful!\n\n" +
-                                   "Test message sent successfully!\n\n" +
-                                   "Your bot is configured correctly. APK files will be delivered here when builds complete.");
-                        showToast("Telegram connection working! ✅");
+                        Toast.makeText(MainActivity.this, "Telegram test successful! ✅", Toast.LENGTH_LONG).show();
+                        updateStage(BuildStage.IDLE, "✅ Telegram connection verified. Ready to start the build!");
                     } else {
-                        updateStatus("❌ Telegram Connection Failed\n\n" +
-                                   "Could not send test message.\n\n" +
-                                   "Please check:\n• Bot token is correct\n• User ID is correct\n• Bot is started (send /start to your bot)");
-                        showToast("Telegram test failed ❌");
+                        updateStage(BuildStage.IDLE, "❌ Telegram test failed. Check your token, user ID, or bot's privacy settings.");
                     }
                 });
-            } catch (Exception e) {
-                runOnUiThread(() -> {
-                    progressDialog.dismiss();
-                    showProgressBar(false);
-                    updateStatus("❌ Telegram Error: " + e.getMessage());
+            } catch (IOException e) {
+                Log.e(TAG, "Error testing Telegram", e);
+                mainHandler.post(() -> {
+                    updateStage(BuildStage.IDLE, "❌ Telegram API Error: " + e.getMessage());
                 });
             }
         }).start();
     }
 
+    private void startBuildProcess() {
+        closeKeyboard();
+        // Final checks
+        String repoName = buildRequest.getRepoName();
+        String repoOwner = buildRequest.getRepoOwner();
+        String buildType = buildRequest.getBuildType();
+        String botToken = botTokenInput.getText().toString().trim();
+        String userId = userIdInput.getText().toString().trim();
+        String githubToken = githubTokenInput.getText().toString().trim();
+        
+        if (repoName == null || repoOwner == null || githubToken.isEmpty() || buildType.isEmpty() || botToken.isEmpty() || userId.isEmpty()) {
+             Toast.makeText(this, "Please complete all fields and select a repository.", Toast.LENGTH_LONG).show();
+             return;
+        }
+        
+        // Finalize BuildRequest
+        buildRequest.setBotToken(botToken);
+        buildRequest.setUserId(userId);
+        buildRequest.setGithubToken(githubToken); // Important for the GitHubService initialization
+
+        // Reset state for a new build
+        lastWorkflowRunId = "";
+        
+        // Start the sequential process
+        new Thread(this::runBuildSequence).start();
+    }
+    
+    private void runBuildSequence() {
+        try {
+            // 1. VERIFYING_ACCESS
+            updateStage(BuildStage.VERIFYING_ACCESS, null);
+            if (!gitHubService.verifyRepositoryAccess(buildRequest.getRepoOwner(), buildRequest.getRepoName())) {
+                throw new IOException("Repository access failed. Check token permissions (repo scope).");
+            }
+            
+            // 2. SETUP_WORKFLOW
+            updateStage(BuildStage.SETUP_WORKFLOW, null);
+            String workflowContent = generateWorkflowContent(buildRequest.getBuildType(), buildRequest.getBotToken(), buildRequest.getUserId());
+            gitHubService.createWorkflowFile(buildRequest.getRepoOwner(), buildRequest.getRepoName(), workflowContent);
+            
+            // 3. TRIGGER_BUILD
+            updateStage(BuildStage.TRIGGER_BUILD, null);
+            gitHubService.dispatchWorkflow(buildRequest.getRepoOwner(), buildRequest.getRepoName(), buildRequest.getBuildType());
+
+            // 4. POLLING_STATUS
+            mainHandler.post(() -> {
+                updateStage(BuildStage.POLLING_STATUS, "🚀 Build triggered successfully. Monitoring status...");
+                startStatusPolling();
+            });
+            
+        } catch (Exception e) {
+            Log.e(TAG, "Build Sequence Failed", e);
+            mainHandler.post(() -> {
+                updateStage(BuildStage.FAILED, "❌ BUILD FAILED: " + e.getMessage());
+                if (statusScheduler != null) statusScheduler.shutdownNow();
+            });
+        }
+    }
+    
+    private void startStatusPolling() {
+        if (statusScheduler != null && !statusScheduler.isShutdown()) {
+            statusScheduler.shutdownNow();
+        }
+        
+        // Use a ScheduledExecutorService for periodic tasks (polling)
+        statusScheduler = Executors.newSingleThreadScheduledExecutor();
+        statusScheduler.scheduleAtFixedRate(this::pollStatus, 5, 10, TimeUnit.SECONDS); // Start after 5s, repeat every 10s
+    }
+
+    private void pollStatus() {
+        // Run network call on a worker thread
+        try {
+            WorkflowResponse response = gitHubService.getLatestWorkflowStatus(
+                buildRequest.getRepoOwner(), 
+                buildRequest.getRepoName()
+            );
+
+            mainHandler.post(() -> {
+                statusText.setText(response.getMessage()); // Update status text with detailed response
+                
+                if (response.isActive()) {
+                    // Telegram update only on the first run ID detection (optional)
+                    if (lastWorkflowRunId.isEmpty() && response.getRunId() != null) {
+                        lastWorkflowRunId = response.getRunId();
+                        sendTelegramNotification(response, BuildStage.POLLING_STATUS.getTelegramStatus());
+                    }
+                    // Keep polling
+                } else if (response.isSuccessful() || response.getConclusion() != null) {
+                    // Final status reached (Success/Failure/Cancelled)
+                    statusScheduler.shutdownNow();
+                    updateStage(BuildStage.COMPLETED, response.getMessage());
+                    sendTelegramNotification(response, response.isSuccessful() ? BuildStage.COMPLETED.getTelegramStatus() : BuildStage.FAILED.getTelegramStatus());
+                } else {
+                    // Unknown or no run found yet, keep waiting
+                    statusText.setText(currentStage.getMessage() + " (Waiting for GitHub to register run...)");
+                }
+            });
+        } catch (IOException e) {
+            Log.e(TAG, "Polling Error", e);
+            mainHandler.post(() -> {
+                statusScheduler.shutdownNow();
+                updateStage(BuildStage.FAILED, "❌ Polling Error: " + e.getMessage());
+            });
+        }
+    }
+    
+    private void sendTelegramNotification(WorkflowResponse response, String statusTitle) {
+        String message = "<b>" + statusTitle + "</b>\n\n" + response.formatTelegramMessage(
+            buildRequest.getRepoOwner() + "/" + buildRequest.getRepoName()
+        );
+        
+        new Thread(() -> {
+            try {
+                telegramService.sendMessage(buildRequest.getBotToken(), buildRequest.getUserId(), message);
+            } catch (IOException e) {
+                Log.e(TAG, "Failed to send Telegram message", e);
+                // Optionally show a toast for failed Telegram send
+            }
+        }).start();
+    }
+
+
+    // =========================================================================
+    // UI Helpers
+    // =========================================================================
+    
     private void showProgressBar(boolean show) {
-        runOnUiThread(() -> {
-            progressBar.setVisibility(show ? View.VISIBLE : View.GONE);
-        });
+        linearProgressBar.setVisibility(show ? View.VISIBLE : View.GONE);
     }
-
-    private void showProgressDialog(String message) {
-        runOnUiThread(() -> {
-            progressDialog = new ProgressDialog(this);
-            progressDialog.setMessage(message);
-            progressDialog.setCancelable(false);
-            progressDialog.show();
-        });
+    
+    private void closeKeyboard() {
+        View view = this.getCurrentFocus();
+        if (view != null) {
+            InputMethodManager imm = (InputMethodManager)getSystemService(Context.INPUT_METHOD_SERVICE);
+            imm.hideSoftInputFromWindow(view.getWindowToken(), 0);
+        }
     }
-
-    private void updateStatus(String message) {
-        runOnUiThread(() -> {
-            statusText.setText(message);
-        });
+    
+    // Simple utility class for cleaner TextWatcher implementation
+    private static class SimpleTextWatcher implements TextWatcher {
+        private final Runnable callback;
+        public SimpleTextWatcher(Runnable callback) { this.callback = callback; }
+        @Override
+        public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+        @Override
+        public void onTextChanged(CharSequence s, int start, int before, int count) {}
+        @Override
+        public void afterTextChanged(Editable s) { callback.run(); }
     }
-
-    private void showToast(String message) {
-        runOnUiThread(() -> {
-            Toast.makeText(this, message, Toast.LENGTH_LONG).show();
-        });
+    
+    // Placeholder method for generating workflow content. This should be in a separate utility.
+    private String generateWorkflowContent(String buildType, String botToken, String userId) {
+        // This is a minimal example. You will need to customize this YAML for your project.
+        return "name: Android CI/CD Build\n" +
+               "on:\n" +
+               "  repository_dispatch:\n" +
+               "    types: [run_android_build]\n" +
+               "    inputs:\n" +
+               "      build_type:\n" +
+               "        description: 'Build variant (e.g., release, debug)'\n" +
+               "        required: true\n" +
+               "        default: 'release'\n" +
+               "\n" +
+               "jobs:\n" +
+               "  build:\n" +
+               "    runs-on: ubuntu-latest\n" +
+               "    steps:\n" +
+               "      - name: Checkout Code\n" +
+               "        uses: actions/checkout@v4\n" +
+               "      - name: Set up JDK 17\n" +
+               "        uses: actions/setup-java@v4\n" +
+               "        with:\n" +
+               "          distribution: 'temurin'\n" +
+               "          java-version: '17'\n" +
+               "      - name: Grant execute permission for gradlew\n" +
+               "        run: chmod +x ./gradlew\n" +
+               "      - name: Build with Gradle\n" +
+               "        run: ./gradlew assemble${{ github.event.client_payload.build_type }}\n" +
+               "      - name: Upload APK artifact\n" +
+               "        uses: actions/upload-artifact@v4\n" +
+               "        with:\n" +
+               "          name: ${{ github.event.client_payload.build_type }}-apk\n" +
+               "          path: app/build/outputs/apk/${{ github.event.client_payload.build_type }}/*.apk\n" +
+               "      - name: Find Latest APK\n" +
+               "        id: find_apk\n" +
+               "        uses: actions/find-files@v1\n" +
+               "        with:\n" +
+               "          pattern: 'app/build/outputs/apk/${{ github.event.client_payload.build_type }}/*.apk'\n" +
+               "          path: 'app/build/outputs/apk/${{ github.event.client_payload.build_type }}'\n" +
+               "      - name: Send APK to Telegram\n" +
+               "        if: success() && steps.find_apk.outputs.files\n" +
+               "        run: |\n" +
+               "          # Note: This step is usually complex and requires a custom Telegram Action \n" +
+               "          # or a script to upload the file, which cannot be done with a simple 'sendMessage'\n" +
+               "          # For this example, we just send a confirmation message.\n" +
+               "          \n" +
+               "          # Simplified Telegram Notification (actual file upload is complex in YAML)\n" +
+               "          curl -s -X POST https://api.telegram.org/bot" + botToken + "/sendMessage \\\n" +
+               "          -d chat_id=" + userId + " \\\n" +
+               "          -d parse_mode=HTML \\\n" +
+               "          -d text=\"<b>✅ Build Complete!</b>%0A%0AThe <code>${{ github.event.client_payload.build_type }}</code> build for <code>${{ github.repository }}</code> is ready. %0A%0A<a href='${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}'>🔗 View Artifacts</a>\"\n" +
+               "";
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        isBuildRunning = false;
+        // Ensure scheduler is stopped to prevent memory leaks and crashes
         if (statusScheduler != null && !statusScheduler.isShutdown()) {
-            statusScheduler.shutdown();
-        }
-        if (progressDialog != null && progressDialog.isShowing()) {
-            progressDialog.dismiss();
+            statusScheduler.shutdownNow();
         }
     }
 }
