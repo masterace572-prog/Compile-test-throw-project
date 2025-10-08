@@ -12,29 +12,17 @@ import java.util.ArrayList;
 public class GitHubService {
     private static final String GITHUB_API_BASE = "https://api.github.com";
     private OkHttpClient client;
-    private final String githubToken; // Stored token
 
-    // Constructor now requires the token to configure the client
-    public GitHubService(String githubToken) {
-        this.githubToken = githubToken;
-        // Centralize authorization header via Interceptor for cleaner method calls
-        this.client = new OkHttpClient.Builder()
-            .addInterceptor(chain -> {
-                Request original = chain.request();
-                Request request = original.newBuilder()
-                    .header("Authorization", "token " + this.githubToken)
-                    .header("Accept", "application/vnd.github.v3+json")
-                    .method(original.method(), original.body())
-                    .build();
-                return chain.proceed(request);
-            })
-            .build();
+    public GitHubService() {
+        this.client = new OkHttpClient();
     }
 
-    // Token removed from arguments, as the client handles it
-    public WorkflowResponse createWorkflowFile(String owner, String repo, String workflowContent) throws IOException {
+    /**
+     * Creates or updates the Android CI/CD workflow file in the repository.
+     */
+    public WorkflowResponse createWorkflowFile(String owner, String repo, String token, String workflowContent) throws IOException {
         String url = GITHUB_API_BASE + "/repos/" + owner + "/" + repo + "/contents/.github/workflows/android-build.yml";
-        // Use android.util.Base64 only if in Android context.
+        // NOTE: Ensure 'android.util.Base64' is available in your Android environment
         String encodedContent = android.util.Base64.encodeToString(workflowContent.getBytes(), android.util.Base64.NO_WRAP);
         
         JSONObject requestBody = new JSONObject();
@@ -48,7 +36,8 @@ public class GitHubService {
 
         Request request = new Request.Builder()
                 .url(url)
-                // Token headers removed, handled by Interceptor
+                .header("Authorization", "token " + token)
+                .header("Accept", "application/vnd.github.v3+json")
                 .header("Content-Type", "application/json")
                 .put(RequestBody.create(requestBody.toString(), MediaType.parse("application/json")))
                 .build();
@@ -57,8 +46,7 @@ public class GitHubService {
             if (response.code() == 201 || response.code() == 200) { // 201 Created, 200 Updated
                 String responseBody = response.body().string();
                 JSONObject jsonResponse = new JSONObject(responseBody);
-                // NOTE: WorkflowResponse constructor needs to handle this JSON structure
-                return new WorkflowResponse(true, "Workflow setup successful", null); 
+                return new WorkflowResponse(jsonResponse);
             } else {
                 String errorBody = response.body().string();
                 throw new IOException("Failed to create workflow: " + response.code() + " - " + errorBody);
@@ -68,8 +56,10 @@ public class GitHubService {
         }
     }
 
-    // Renamed from triggerWorkflow to dispatchWorkflow and cleaned up
-    public WorkflowResponse dispatchWorkflow(String owner, String repo, String buildType) throws IOException {
+    /**
+     * Triggers the workflow using a repository_dispatch event with the build type payload.
+     */
+    public WorkflowResponse dispatchWorkflow(String owner, String repo, String token, String buildType) throws IOException {
         String url = GITHUB_API_BASE + "/repos/" + owner + "/" + repo + "/dispatches";
         
         JSONObject requestBody = new JSONObject();
@@ -85,13 +75,15 @@ public class GitHubService {
 
         Request request = new Request.Builder()
                 .url(url)
-                // Token headers removed, handled by Interceptor
+                .header("Authorization", "token " + token)
+                .header("Accept", "application/vnd.github.v3+json")
                 .header("Content-Type", "application/json")
                 .post(RequestBody.create(requestBody.toString(), MediaType.parse("application/json")))
                 .build();
 
         try (Response response = client.newCall(request).execute()) {
             if (response.code() == 204) {
+                // Return success immediately, polling starts in MainActivity
                 return new WorkflowResponse(true, "Build dispatch successful. Polling status...", null);
             } else {
                 String errorBody = response.body().string();
@@ -99,15 +91,19 @@ public class GitHubService {
             }
         }
     }
-
-    // Utility method to fetch all accessible repositories
-    public List<String> getRepositories() throws IOException {
+    
+    /**
+     * Fetches a list of accessible repositories for the authenticated user.
+     */
+    public List<String> getRepositories(String token) throws IOException {
         List<String> repoList = new ArrayList<>();
-        String url = GITHUB_API_BASE + "/user/repos?per_page=100";
+        // Fetch all repos where the user is an owner or collaborator
+        String url = GITHUB_API_BASE + "/user/repos?per_page=100&affiliation=owner,collaborator"; 
         
         Request request = new Request.Builder()
                 .url(url)
-                // Token headers removed, handled by Interceptor
+                .header("Authorization", "token " + token)
+                .header("Accept", "application/vnd.github.v3+json")
                 .build();
 
         try (Response response = client.newCall(request).execute()) {
@@ -116,7 +112,8 @@ public class GitHubService {
                 JSONArray repos = new JSONArray(body);
                 for (int i = 0; i < repos.length(); i++) {
                     JSONObject repo = repos.getJSONObject(i);
-                    repoList.add(repo.getString("full_name")); // e.g., owner/repo_name
+                    // Add full_name (e.g., owner/repo_name)
+                    repoList.add(repo.getString("full_name")); 
                 }
                 return repoList;
             } else {
@@ -128,35 +125,24 @@ public class GitHubService {
         }
     }
 
-
-    // Token removed from arguments, simplified for Interceptor
-    public boolean verifyRepositoryAccess(String owner, String repo) throws IOException {
-        String url = GITHUB_API_BASE + "/repos/" + owner + "/" + repo;
-        
-        Request request = new Request.Builder()
-                .url(url)
-                // Token headers removed, handled by Interceptor
-                .build();
-
-        try (Response response = client.newCall(request).execute()) {
-            // A 200 OK means the repo exists and is accessible with the token (if private) or is public.
-            return response.code() == 200;
-        }
-    }
-    
-    // getLatestWorkflowStatus is the preferred method for polling
-    public WorkflowResponse getLatestWorkflowStatus(String owner, String repo) throws IOException {
+    /**
+     * Gets the latest workflow run status for the main branch.
+     */
+    public WorkflowResponse getLatestWorkflowStatus(String owner, String repo, String token) throws IOException {
         String url = GITHUB_API_BASE + "/repos/" + owner + "/" + repo + "/actions/runs?branch=main&per_page=1";
         
         Request request = new Request.Builder()
                 .url(url)
+                .header("Authorization", "token " + token)
+                .header("Accept", "application/vnd.github.v3+json")
                 .build();
 
         try (Response response = client.newCall(request).execute()) {
             if (response.code() == 200) {
                 String responseBody = response.body().string();
                 JSONObject jsonResponse = new JSONObject(responseBody);
-                return new WorkflowResponse(jsonResponse); // WorkflowResponse must be able to parse this
+                // WorkflowResponse constructor handles parsing the runs list
+                return new WorkflowResponse(jsonResponse); 
             } else {
                 String errorBody = response.body().string();
                 throw new IOException("Failed to get workflow status: " + response.code() + " - " + errorBody);
@@ -166,12 +152,33 @@ public class GitHubService {
         }
     }
     
-    // Keeping this for reference, but getLatestWorkflowStatus is generally better for polling
-    public WorkflowResponse getWorkflowRunById(String owner, String repo, String runId) throws IOException {
+    /**
+     * Verifies that the given repository exists and is accessible.
+     */
+    public boolean verifyRepositoryAccess(String owner, String repo, String token) throws IOException {
+        String url = GITHUB_API_BASE + "/repos/" + owner + "/" + repo;
+        
+        Request request = new Request.Builder()
+                .url(url)
+                .header("Authorization", "token " + token)
+                .header("Accept", "application/vnd.github.v3+json")
+                .build();
+
+        try (Response response = client.newCall(request).execute()) {
+            // A 200 OK means the repo exists and is accessible with the token
+            return response.code() == 200; 
+        }
+    }
+
+    // Keeping existing methods for completeness, though some are duplicates of the new logic:
+    
+    public WorkflowResponse getWorkflowRunById(String owner, String repo, String token, String runId) throws IOException {
         String url = GITHUB_API_BASE + "/repos/" + owner + "/" + repo + "/actions/runs/" + runId;
         
         Request request = new Request.Builder()
                 .url(url)
+                .header("Authorization", "token " + token)
+                .header("Accept", "application/vnd.github.v3+json")
                 .build();
 
         try (Response response = client.newCall(request).execute()) {
@@ -188,13 +195,13 @@ public class GitHubService {
         }
     }
     
-    // Token removed from arguments
-    public WorkflowResponse cancelWorkflowRun(String owner, String repo, String runId) throws IOException {
+    public WorkflowResponse cancelWorkflowRun(String owner, String repo, String token, String runId) throws IOException {
         String url = GITHUB_API_BASE + "/repos/" + owner + "/" + repo + "/actions/runs/" + runId + "/cancel";
         
         Request request = new Request.Builder()
                 .url(url)
-                // Token headers removed, handled by Interceptor
+                .header("Authorization", "token " + token)
+                .header("Accept", "application/vnd.github.v3+json")
                 .header("Content-Type", "application/json")
                 .post(RequestBody.create("{}", MediaType.parse("application/json")))
                 .build();
@@ -208,7 +215,4 @@ public class GitHubService {
             }
         }
     }
-    
-    // The previous methods workflowExists, getWorkflowStatus, and getLatestWorkflowRun 
-    // are replaced/consolidated by the new methods above for better design.
 }
