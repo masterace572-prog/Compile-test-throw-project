@@ -31,14 +31,14 @@ public class MainActivity extends AppCompatActivity {
     private LinearProgressIndicator linearProgressBar;
     
     // Services and Data
-    private GitHubService gitHubService; 
+    private GitHubService gitHubService = new GitHubService(); // FIX: Use parameterless constructor
     private TelegramService telegramService = new TelegramService(); 
     
     // State
     private BuildStage currentStage = BuildStage.IDLE; 
     private String currentRepoOwner = "";
     private String currentRepoName = "";
-    private String currentBuildType = "release"; // Default
+    private String currentBuildType = "release"; 
     private String currentBotToken = "";
     private String currentUserId = "";
     private String lastWorkflowRunId = "";
@@ -47,14 +47,13 @@ public class MainActivity extends AppCompatActivity {
 
     // Concurrency
     private ScheduledExecutorService statusScheduler;
-    private Handler mainHandler; // The key for Main Thread safety
+    private Handler mainHandler;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         
-        // Initialize the Handler attached to the main thread's looper
         mainHandler = new Handler(Looper.getMainLooper());
         
         initializeViews();
@@ -74,20 +73,15 @@ public class MainActivity extends AppCompatActivity {
         testConnectionBtn = findViewById(R.id.testConnectionBtn);
         fetchReposBtn = findViewById(R.id.fetchReposBtn);
         statusText = findViewById(R.id.statusText);
-        // Corrected to use the Material LinearProgressIndicator ID
         linearProgressBar = findViewById(R.id.linearProgressBar); 
     }
     
     private void setupDropdowns() {
-        // Setup build type dropdown (R.array.build_types must exist in res/values/strings.xml)
+        // Setup build type dropdown (R.array.build_types must exist)
         ArrayAdapter<CharSequence> buildAdapter = ArrayAdapter.createFromResource(this,
                 R.array.build_types, android.R.layout.simple_spinner_dropdown_item);
         buildTypeSpinner.setAdapter(buildAdapter);
         buildTypeSpinner.setText(currentBuildType, false);
-
-        // The simple_spinner_dropdown_item layout uses standard colors, 
-        // if your theme is dark, you might want to create a custom layout like `dropdown_item.xml`
-        // and use ArrayAdapter(this, R.layout.dropdown_item, ...)
         
         buildTypeSpinner.setOnItemClickListener((parent, view, position, id) -> {
             currentBuildType = (String) parent.getItemAtPosition(position);
@@ -124,7 +118,6 @@ public class MainActivity extends AppCompatActivity {
     }
     
     private void checkBuildButtonState() {
-        // Must be run on the UI thread, which it is, as it's called from listeners/post()
         boolean isRepoSelected = !currentRepoName.isEmpty();
         boolean hasGithubToken = !githubTokenInput.getText().toString().trim().isEmpty();
         boolean hasBotToken = !botTokenInput.getText().toString().trim().isEmpty();
@@ -132,10 +125,8 @@ public class MainActivity extends AppCompatActivity {
         
         boolean hasTelegramDetails = hasBotToken && hasUserId;
         
-        // Only enable test button if both Telegram tokens are present
         testConnectionBtn.setEnabled(hasTelegramDetails);
 
-        // Only enable build if IDLE, repo is selected, and all tokens are present
         buildBtn.setEnabled(currentStage == BuildStage.IDLE && isRepoSelected && hasGithubToken && hasTelegramDetails);
     }
 
@@ -150,9 +141,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * Updates the UI to reflect the current BuildStage. MUST be called on the Main Thread.
-     */
     private void updateStage(BuildStage newStage, String customMessage) {
         this.currentStage = newStage;
         
@@ -160,7 +148,7 @@ public class MainActivity extends AppCompatActivity {
                                newStage.getStageId() < BuildStage.COMPLETED.getStageId();
         
         linearProgressBar.setVisibility(showProgress ? View.VISIBLE : View.GONE);
-        linearProgressBar.setIndeterminate(true); // Always indeterminate for workflow polling
+        linearProgressBar.setIndeterminate(true); 
 
         String message = (customMessage != null) ? customMessage : newStage.getMessage();
         statusText.setText(message);
@@ -170,26 +158,21 @@ public class MainActivity extends AppCompatActivity {
     }
     
     // =========================================================================
-    // API & Build Logic - All these methods run on worker threads
+    // API & Build Logic 
     // =========================================================================
 
     private void fetchRepositories() {
         final String token = githubTokenInput.getText().toString().trim();
         if (token.isEmpty()) return;
 
-        // UI update MUST be on Main Thread
         updateStage(BuildStage.FETCHING_REPOS, BuildStage.FETCHING_REPOS.getMessage());
         
-        // Initialize GitHub service with the token on the main thread, before starting network thread
-        gitHubService = new GitHubService(token);
-
         new Thread(() -> {
             try {
-                // Network operation
-                List<String> repos = gitHubService.getRepositories();
+                // FIX: Pass token to getRepositories
+                List<String> repos = gitHubService.getRepositories(token);
                 availableRepos = repos;
                 
-                // UI update MUST be posted back to the main thread
                 mainHandler.post(() -> {
                     ArrayAdapter<String> repoAdapter = new ArrayAdapter<>(
                         MainActivity.this, 
@@ -207,7 +190,6 @@ public class MainActivity extends AppCompatActivity {
                 });
             } catch (IOException e) {
                 Log.e(TAG, "Error fetching repos", e);
-                // UI update MUST be posted back to the main thread
                 mainHandler.post(() -> {
                     updateStage(BuildStage.IDLE, "❌ Failed to fetch repositories: " + e.getMessage());
                 });
@@ -220,15 +202,12 @@ public class MainActivity extends AppCompatActivity {
         final String userId = userIdInput.getText().toString().trim();
         if (botToken.isEmpty() || userId.isEmpty()) return;
 
-        // UI update MUST be on Main Thread
         updateStage(BuildStage.TESTING_TELEGRAM, BuildStage.TESTING_TELEGRAM.getMessage());
 
         new Thread(() -> {
             try {
-                // Network operation
                 boolean success = telegramService.testConnection(botToken, userId);
                 
-                // UI update MUST be posted back to the main thread
                 mainHandler.post(() -> {
                     if (success) {
                         Toast.makeText(MainActivity.this, "Telegram test successful! ✅", Toast.LENGTH_LONG).show();
@@ -239,7 +218,6 @@ public class MainActivity extends AppCompatActivity {
                 });
             } catch (IOException e) {
                 Log.e(TAG, "Error testing Telegram", e);
-                // UI update MUST be posted back to the main thread
                 mainHandler.post(() -> {
                     updateStage(BuildStage.IDLE, "❌ Telegram API Error: " + e.getMessage());
                 });
@@ -253,40 +231,41 @@ public class MainActivity extends AppCompatActivity {
              return;
         }
         
+        // FIX: The GitHubService constructor is parameterless, so we don't need this line.
+        // gitHubService = new GitHubService(githubToken); 
+        
         final String githubToken = githubTokenInput.getText().toString().trim();
         currentBotToken = botTokenInput.getText().toString().trim();
         currentUserId = userIdInput.getText().toString().trim();
         
-        // Reset state for a new build
         lastWorkflowRunId = "";
         lastMessageId = "";
         
-        // Re-initialize service in case token was updated
-        gitHubService = new GitHubService(githubToken); 
-        
-        // Start the sequential process on a worker thread
         new Thread(this::runBuildSequence).start();
     }
     
-    /**
-     * Runs the build stages sequentially on a worker thread.
-     */
     private void runBuildSequence() {
+        // Retrieve the token inside the thread for safety
+        final String githubToken = githubTokenInput.getText().toString().trim(); 
+
         try {
             // 1. VERIFYING_ACCESS
             mainHandler.post(() -> updateStage(BuildStage.VERIFYING_ACCESS, BuildStage.VERIFYING_ACCESS.getMessage()));
-            if (!gitHubService.verifyRepositoryAccess(currentRepoOwner, currentRepoName)) {
+            // FIX: Pass token to verifyRepositoryAccess
+            if (!gitHubService.verifyRepositoryAccess(currentRepoOwner, currentRepoName, githubToken)) {
                 throw new Exception("Repository access failed. Check token permissions (repo scope).");
             }
             
             // 2. SETUP_WORKFLOW
             mainHandler.post(() -> updateStage(BuildStage.SETUP_WORKFLOW, BuildStage.SETUP_WORKFLOW.getMessage()));
             String workflowContent = generateWorkflowYaml(currentBotToken, currentUserId, currentBuildType);
-            gitHubService.createWorkflowFile(currentRepoOwner, currentRepoName, workflowContent);
+            // FIX: Pass token to createWorkflowFile
+            gitHubService.createWorkflowFile(currentRepoOwner, currentRepoName, githubToken, workflowContent);
             
             // 3. TRIGGER_BUILD
             mainHandler.post(() -> updateStage(BuildStage.TRIGGER_BUILD, BuildStage.TRIGGER_BUILD.getMessage()));
-            gitHubService.dispatchWorkflow(currentRepoOwner, currentRepoName, currentBuildType);
+            // FIX: Pass token and currentBuildType to dispatchWorkflow
+            gitHubService.dispatchWorkflow(currentRepoOwner, currentRepoName, githubToken, currentBuildType);
 
             // Send initial Telegram message after successful trigger
             sendInitialTelegramMessage();
@@ -299,11 +278,9 @@ public class MainActivity extends AppCompatActivity {
             
         } catch (Exception e) {
             Log.e(TAG, "Build Sequence Failed", e);
-            // CRITICAL FIX: Ensure failure updates are wrapped in mainHandler
             mainHandler.post(() -> { 
                 updateStage(BuildStage.FAILED, "❌ BUILD FAILED: " + e.getMessage());
                 if (statusScheduler != null) statusScheduler.shutdownNow();
-                // Attempt to notify Telegram of failure
                 updateTelegramMessage(BuildStage.FAILED.getTelegramStatus(), "Build failed with error: " + e.getMessage());
             });
         }
@@ -314,38 +291,31 @@ public class MainActivity extends AppCompatActivity {
             statusScheduler.shutdownNow();
         }
         
-        // Use a ScheduledExecutorService for periodic tasks (polling)
         statusScheduler = Executors.newSingleThreadScheduledExecutor();
-        // Start after 5s, repeat every 10s
         statusScheduler.scheduleAtFixedRate(this::pollStatus, 5, 10, TimeUnit.SECONDS); 
     }
 
-    /**
-     * Executes GitHub API polling on the background statusScheduler thread.
-     */
     private void pollStatus() {
+        final String githubToken = githubTokenInput.getText().toString().trim();
+
         try {
-            // Network operation
+            // FIX: Pass token to getLatestWorkflowStatus
             WorkflowResponse response = gitHubService.getLatestWorkflowStatus(
                 currentRepoOwner, 
-                currentRepoName
+                currentRepoName,
+                githubToken
             );
 
-            // CRITICAL FIX: The entire block that touches UI must be on Main Thread
             mainHandler.post(() -> {
-                // UI operations start here
                 statusText.setText(response.getMessage()); 
                 
                 if (response.isActive()) {
-                    // Update run ID if found (used for potential cancel/specific status link)
                     if (lastWorkflowRunId.isEmpty() && response.getRunId() != null) {
                         lastWorkflowRunId = response.getRunId();
                     }
-                    // Update Telegram status regularly while active
                     updateTelegramMessage(BuildStage.POLLING_STATUS.getTelegramStatus(), response.formatTelegramMessage(currentRepoOwner + "/" + currentRepoName));
                     
                 } else if (response.getConclusion() != null) {
-                    // Final status reached (Success/Failure/Cancelled)
                     statusScheduler.shutdownNow();
                     
                     if (response.isSuccessful()) {
@@ -357,11 +327,10 @@ public class MainActivity extends AppCompatActivity {
                     updateTelegramMessage(response.isSuccessful() ? BuildStage.COMPLETED.getTelegramStatus() : BuildStage.FAILED.getTelegramStatus(), 
                                           response.formatTelegramMessage(currentRepoOwner + "/" + currentRepoName));
                 }
-            }); // End of mainHandler.post()
+            }); 
             
         } catch (IOException e) {
             Log.e(TAG, "Polling Error", e);
-            // CRITICAL FIX: Ensure failure updates are wrapped in mainHandler
             mainHandler.post(() -> {
                 statusScheduler.shutdownNow();
                 updateStage(BuildStage.FAILED, "❌ Polling Error: " + e.getMessage());
@@ -380,7 +349,6 @@ public class MainActivity extends AppCompatActivity {
                                "📦 Repository: " + currentRepoOwner + "/" + currentRepoName + "\n" +
                                "🔨 Build Type: " + currentBuildType;
                 
-                // Network operation
                 String messageId = telegramService.sendMessageWithId(currentBotToken, currentUserId, message);
                 if (messageId != null) {
                     lastMessageId = messageId;
@@ -392,19 +360,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void updateTelegramMessage(String statusTitle, String details) {
-        // Only attempt to update if we have an existing message ID
         if (lastMessageId.isEmpty()) {
-            sendInitialTelegramMessage(); // Fallback to sending if ID is missing
+            sendInitialTelegramMessage(); 
             return;
         }
 
         new Thread(() -> {
             try {
                 String fullMessage = "<b>" + statusTitle + "</b>\n\n" + details;
-                
-                // Network operation (editing the message)
                 telegramService.editMessage(currentBotToken, currentUserId, lastMessageId, fullMessage);
-                
             } catch (Exception e) {
                 Log.e(TAG, "Failed to update Telegram message", e);
             }
@@ -454,10 +418,8 @@ public class MainActivity extends AppCompatActivity {
                 "    - name: 🔍 Find APK\n" +
                 "      id: find_apk\n" +
                 "      run: |\n" +
-                "        # Find the main APK file, avoiding unsigned or debug artifacts if possible\n" +
                 "        APK_PATH=$(find ./app/build/outputs/apk/ -name \"*." + buildType + ".apk\" | grep -v \"unsigned\" | head -1)\n" +
                 "        if [ -z \"$APK_PATH\" ]; then\n" +
-                "          # Fallback to finding any non-unsigned APK\n" +
                 "          APK_PATH=$(find . -name \"*.apk\" | grep -v \"unsigned\" | head -1)\n" +
                 "        fi\n" +
                 "        echo \"APK_PATH=$APK_PATH\" >> $GITHUB_OUTPUT\n" +
@@ -465,7 +427,7 @@ public class MainActivity extends AppCompatActivity {
                 "\n" +
                 "    - name: 📤 Send to Telegram\n" +
                 "      uses: appleboy/telegram-action@master\n" +
-                "      if: always()\n" + // Run even if previous steps fail to send the report
+                "      if: always()\n" + 
                 "      with:\n" +
                 "        to: " + userId + "\n" +
                 "        token: " + botToken + "\n" +
@@ -483,7 +445,6 @@ public class MainActivity extends AppCompatActivity {
                 "      run: echo \"Final Job Status: ${{ job.status }}\"";
     }
 
-    // Simple utility class for cleaner TextWatcher implementation
     private static class SimpleTextWatcher implements android.text.TextWatcher {
         private final Runnable callback;
         public SimpleTextWatcher(Runnable callback) { this.callback = callback; }
@@ -498,7 +459,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        // Always shut down the background scheduler when the activity is destroyed
         if (statusScheduler != null && !statusScheduler.isShutdown()) {
             statusScheduler.shutdownNow();
         }
