@@ -71,18 +71,20 @@ public class TelegramService {
                 .build();
 
         try (Response response = client.newCall(request).execute()) {
+            // Telegram returns 200 for success
             return response.code() == 200;
         }
     }
 
-    // Existing sendMessage method
+    // Existing sendMessage method for simple use cases
     public boolean sendMessage(String botToken, String chatId, String message) throws IOException {
+        // Use the new method and discard the ID
         return sendMessageWithId(botToken, chatId, message) != null;
     }
 
     // Existing testConnection method
     public boolean testConnection(String botToken, String chatId) throws IOException {
-        String testMessage = "🤖 APK Builder Pro Test\n\nYour setup is working correctly! You will receive APK files here when builds complete.";
+        String testMessage = "🤖 <b>APK Builder Pro Test</b>\n\nYour setup is working correctly! You will receive build statuses and APK files here.";
         return sendMessage(botToken, chatId, testMessage);
     }
 }
