@@ -1,5 +1,7 @@
 package com.apkbuilder.pro.models;
 
+// Consider adding @NonNull annotations for improved safety, but keeping
+// the original structure for compatibility.
 public class BuildRequest {
     private String repoUrl;
     private String githubToken;
