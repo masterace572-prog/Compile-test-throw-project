@@ -57,7 +57,7 @@ public class TelegramService {
         JSONObject requestBody = new JSONObject();
         try {
             requestBody.put("chat_id", chatId);
-            requestBody.put("message_id", messageId); // Use the message_id to target the message
+            requestBody.put("message_id", messageId); // Target the message to edit
             requestBody.put("text", newText);
             requestBody.put("parse_mode", "HTML");
         } catch (Exception e) {
@@ -71,19 +71,18 @@ public class TelegramService {
                 .build();
 
         try (Response response = client.newCall(request).execute()) {
-            // Telegram returns 200 for success
             return response.code() == 200;
         }
     }
 
-    // Keep the original sendMessage for compatibility if needed, but the new one is better
-    // You should rename your old 'sendMessage' or delete it if you only use sendMessageWithId
+    // Existing sendMessage method
     public boolean sendMessage(String botToken, String chatId, String message) throws IOException {
         return sendMessageWithId(botToken, chatId, message) != null;
     }
 
+    // Existing testConnection method
     public boolean testConnection(String botToken, String chatId) throws IOException {
-        String testMessage = "🤖 <b>APK Builder Pro Test</b>\n\nYour setup is working correctly! You will receive build statuses and APK files here.";
+        String testMessage = "🤖 APK Builder Pro Test\n\nYour setup is working correctly! You will receive APK files here when builds complete.";
         return sendMessage(botToken, chatId, testMessage);
     }
 }
